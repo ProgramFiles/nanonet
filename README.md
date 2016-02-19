@@ -1,4 +1,3 @@
-
 Nanonet
 =======
 Nanonet provides recurrent neural network basecalling via currennt. Event data
@@ -28,7 +27,6 @@ the Nvidia CUDA libaries:
     wget http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1410/x86_64/cuda-repo-ubuntu1410_7.0-28_amd64.deb
     sudo dpkg -i cuda-repo-ubuntu1410_7.0-28_amd64.deb
 
-    sudo apt-get install libboost-all-dev libnetcdf-dev netcdf-bin cmake
     sudo apt-get update
     sudo apt-get install -y cuda
 
@@ -41,7 +39,7 @@ should show information about your GPU.
 
 Building currennt has some further, more standard, requirements:
 
-    sudo apt-get install libboost-all-dev libnetcdf-dev cmake
+    sudo apt-get install libboost-all-dev libnetcdf-dev netcdf-bin cmake
 
 after which we can build currennt:
 
