@@ -1,4 +1,5 @@
 import numpy as np
+from itertools import product
 
 ###
 ### TODO: pull in tang_imap to ann_util
@@ -11,7 +12,7 @@ from nanonet.util import kmers_to_sequence
 ###
 from log_viterbi import make_log_trans, c_viterbi, c_viterbi_trans_free
 
-__threemers__ = [''.join(x), product('ATGC', repeat=3)]
+__threemers__ = [''.join(x) for x in product('ATGC', repeat=3)]
 __eta__ = 1e-100 
 
 
@@ -54,7 +55,7 @@ def basecall_read(currennt_output, kmers=__threemers__, null_state=True, trans_f
    
     # Form basecall from kmers, the filter here removes null_state kmer
     calls = (self.kmers[r] for r in v_path)
-    basecall = kmers_to_sequence([k if k != null_kmer for k in calls])
+    basecall = kmers_to_sequence([k for k in calls if k != null_kmer])
     return seq_label, basecall
 
 

@@ -184,7 +184,7 @@ class SquiggleFeatureGenerator(object):
         # Augment events 
         for field in ('mean', 'stdv', 'length',):
             scale_array(self.events[field], copy=False)
-        delta = np.edifff1d(self.events['mean'], to_begin=0))
+        delta = np.edifff1d(self.events['mean'], to_begin=0)
         scale_array(delta, with_mean=False, copy = False)
         self.events = nprf.append_fields(events, 'delta', delta)
  

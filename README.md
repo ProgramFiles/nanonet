@@ -7,14 +7,14 @@ pretrained network. Output is as a single .fasta file.
 
 
 Installation
-************
+------------
 Nanonet leverages currennt to run recurrennt neural networks. Currennt is
 generally run with GPUs to aid performance but can be run in a CPU only
 environment. 
 
 
-Installation of currennt
-------------------------
+**Installation of currennt**
+
 Oxford Nanopore Technologies have provided a fork of currennt with minor
 modifications to that which is available on
 https://sourceforge.net/projects/currennt/. The changes serve to allow
@@ -53,8 +53,8 @@ after which we can build currennt:
 A successful build will result in a single executable file named `currennt`.
 
 
-Installation of nanonet
------------------------
+**Installation of nanonet**
+
 Nanonet is a mostly python with a single C library for performing Viterbi
 decoding on the probability matrix output by currennt. Installation is via
 the standard mechanism for python packages:
@@ -65,7 +65,7 @@ This should build the C module and install the basecalling program.
 
 
 Peforming basecalling
-*********************
+---------------------
 
 
 
