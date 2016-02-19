@@ -2,7 +2,7 @@
 
 
 install:
-	sudo python setup.py install
+	python setup.py install
 
 develop: clean
 	python setup.py develop --user
