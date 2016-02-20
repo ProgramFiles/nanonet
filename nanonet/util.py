@@ -1,6 +1,7 @@
 from itertools import tee, izip, izip_longest
 import random
 import string
+import math
 
 def random_string(length=6):
     """Return a random upper-case string of given length.

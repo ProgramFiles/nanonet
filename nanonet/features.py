@@ -2,6 +2,7 @@ import os
 import random
 import string
 import numpy as np 
+import numpy.lib.recfunctions as nprf
 from netCDF4 import Dataset
 
 ###
@@ -81,8 +82,8 @@ def scale_array(X, with_mean=True, with_std=True, copy=True):
             X -= mean_1
     if with_std:
         scale_ = np.std(X)
-        if scale == 0.0:
-            scale = 1.0
+        if scale_ == 0.0:
+            scale_ = 1.0
         X /= scale_
         if with_mean:
             mean_2 = X.mean()
@@ -184,12 +185,12 @@ class SquiggleFeatureGenerator(object):
         # Augment events 
         for field in ('mean', 'stdv', 'length',):
             scale_array(self.events[field], copy=False)
-        delta = np.edifff1d(self.events['mean'], to_begin=0)
+        delta = np.ediff1d(self.events['mean'], to_begin=0)
         scale_array(delta, with_mean=False, copy = False)
         self.events = nprf.append_fields(events, 'delta', delta)
  
     def to_numpy(self):
-        out = np.empty((self.end - self.start, len(self.feature_order)))
+        out = np.empty((len(self.events), len(self.feature_order)))
         for j, key in enumerate(self.feature_order):
             out[:, j] = self.features[key]
         return out
@@ -199,7 +200,7 @@ class SquiggleFeatureGenerator(object):
         if tag in self.features:
             return self
         self.feature_order.append(tag)
-        self.features[tag] = self._padded_offset_array(self.events[field], pos)
+        self.features[tag] = padded_offset_array(self.events[field], pos)
         return self
 
     def add_mean_pos(self, pos):

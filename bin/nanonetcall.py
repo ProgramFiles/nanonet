@@ -37,7 +37,9 @@ parser.add_argument("--model", type=str, action=FileExist, required=True,
     help="Trained ANN.")
 parser.add_argument("--cuda", type=int, default=0,
     help="CUDA device number, on AWS, it is one of 0, 1, 2, 3, check with nvidia-smi first, default 0." )
-parser.add_argument("--jobs", default=8, type=int, action=CheckCPU,
+parser.add_argument("--nocuda", default=False, action='store_true',
+    help="Use CPU for neural network calculations.")
+parser.add_argument("--jobs", default=1, type=int, action=CheckCPU,
     help="No of Viterbi decoding jobs to run in parallel, using more than 1 cpus together with --use_trans will slow things down significantly.")
 parser.add_argument("--nseqs", default=20, type=int,
     help="No. of sequences for currennt to process simultaneously. The upper limit is determined by --max_len and ANN size." )
@@ -99,7 +101,9 @@ if __name__ == "__main__":
         cfg.write("input_noise_sigma    = 0.0\n")
         cfg.write("parallel_sequences   = {}\n".format(args.nseqs))
         cfg.write("cache_path           = " + args.cache_path + "\n")
-    
+        if args.nocuda:
+            cfg.write("cuda             = false\n")   
+ 
     # Run Currennt
     os.environ["CURRENNT_CUDA_DEVICE"]="{}".format(args.cuda)
     cmd = [__currennt_exe__, currennt_cfg]
@@ -113,9 +117,9 @@ if __name__ == "__main__":
     pstep2  = args.trans[2]/16.0
     pstep3  = args.trans[3]/44.0
     
-    cpc = CurrenntParserCaller(fin=currennt_out, limit=args.limit, pstay=pstay, pstep1=pstep1, pstep2=pstep2, pstep3=pstep3)
+    cpc = CurrenntParserCaller(fin=currennt_out, limit=args.limit, trans_free=args.trans_free, pstay=pstay, pstep1=pstep1, pstep2=pstep2, pstep3=pstep3)
     with open(args.output, 'w') as fasta:
-        for result in cpc.viterbi_basecalls(ncpus=args.jobs, trans_free=args.trans_free):
+        for result in cpc.basecalls(ncpus=args.jobs):
             fasta.write(">{}\n{}\n".format(*result))   
  
     # Clean up, should use a context manager...
