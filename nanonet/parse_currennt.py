@@ -1,21 +1,10 @@
 import numpy as np
-from itertools import product
 from copy import copy
 
-###
-### TODO: pull in tang_imap to ann_util
-###
-from tang.util.tang_iter import tang_imap
 
-from nanonet.util import kmers_to_sequence
-###
-### TODO: change this import
-###
-from log_viterbi import make_log_trans, c_viterbi, c_viterbi_trans_free
+from nanonet.util import kmers_to_sequence, tang_imap, all_nmers, __eta__
+from nanonet.log_viterbi import make_log_trans, c_viterbi, c_viterbi_trans_free
 
-def all_nmers(n=3):
-    return [''.join(x) for x in product('ATGC', repeat=n)]
-__eta__ = 1e-100 
 
 
 def basecall_read(currennt_output, kmers=all_nmers(3), null_state=True, trans_free=False, pstay=0.1153, pstep1=0.17225, pstep2=0.01176, pstep3=0.00018):
@@ -93,7 +82,6 @@ class CurrenntParserCaller(object):
         if self.all_data is None:
             with open(self.currennt_file) as f:
                 for cnt, line in enumerate(f):
-                    print "processing CURRENNT output for read {}".format(cnt)
                     if cnt == limit:
                         break
                     l = line.strip()

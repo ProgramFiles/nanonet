@@ -1,7 +1,16 @@
-from itertools import tee, izip, izip_longest
+from itertools import tee, imap, izip, izip_longest, product
+from functools import partial
+from multiprocessing import Pool
 import random
 import string
 import math
+
+__eta__ = 1e-100
+
+# N.B. this defines the order of our states, it is not lexographical!
+def all_nmers(n=3):
+    return [''.join(x) for x in product('ATCG', repeat=3)]
+
 
 def random_string(length=6):
     """Return a random upper-case string of given length.
@@ -24,6 +33,131 @@ def window(iterable, size):
         for each in iters[i:]:
             next(each, None)
     return izip(*iters)
+
+
+def _try_except_pass(func, *args, **kwargs):
+    """Implementation of try_except_pass below. When wrapping a function we
+    would ordinarily form a closure over a (sub)set of the inputs. Such
+    closures cannot be pickled however since the wrapper name is not
+    importable. We get around this by using functools.partial (which is
+    pickleable). The result is that we can decorate a function to mask
+    exceptions thrown by it.
+    """
+
+    # Strip out "our" arguments, this slightly perverse business allows
+    #    us to call the target function with multiple arguments.
+    recover = kwargs.pop('recover', None)
+    recover_fail = kwargs.pop('recover_fail', False)
+    try:
+        return func(*args, **kwargs)
+    except:
+        exc_info = sys.exc_info()
+        try:
+            if recover is not None:
+                recover(*args, **kwargs)
+        except Exception as e:
+            sys.stderr.write("Unrecoverable error.")
+            if recover_fail:
+                raise e
+            else:
+                traceback.print_exc(sys.exc_info()[2])
+        # print the original traceback
+        traceback.print_tb(exc_info[2])
+        return None
+
+
+def try_except_pass(func, recover=None, recover_fail=False):
+    """Wrap a function to mask exceptions that it may raise. This is
+    equivalent to::
+
+        def try_except_pass(func):
+            def wrapped()
+                try:
+                    func()
+                except Exception as e:
+                    print str(e)
+            return wrapped
+
+    in the simplest sense, but the resulting function can be pickled.
+
+    :param func: function to call
+    :param recover: function to call immediately after exception thrown in
+        calling `func`. Will be passed same args and kwargs as `func`.
+    :param recover_fail: raise exception if recover function raises?
+
+    ..note::
+        See `_try_except_pass` for implementation, which is not locally
+        scoped here because we wish for it to be pickleable.
+
+    ..warning::
+        Best practice would suggest this to be a dangerous function. Consider
+        rewriting the target function to better handle its errors. The use
+        case here is intended to be ignoring exceptions raised by functions
+        when mapped over arguments, if failures for some arguments can be
+        tolerated.
+
+    """
+    return partial(_try_except_pass, func, recover=recover, recover_fail=recover_fail)
+
+
+class __NotGiven(object):
+    def __init__(self):
+        """Some horrible voodoo"""
+        pass
+
+
+def tang_imap(
+    function, args, fix_args=__NotGiven(), fix_kwargs=__NotGiven(),
+    threads=1, unordered=False, chunksize=1,
+    pass_exception=False, recover=None, recover_fail=False,
+):
+    """Wrapper around various map functions
+
+    :param function: the function to apply, must be pickalable for multiprocess
+        mapping (problems will results if the function is not at the top level
+        of scope).
+    :param args: iterable of argument values of function to map over
+    :param fix_args: arguments to hold fixed
+    :param fix_kwargs: keyword arguments to hold fixed
+    :param threads: number of subprocesses
+    :param unordered: use unordered multiprocessing map
+    :param chunksize: multiprocessing job chunksize
+    :param pass_exception: ignore exceptions thrown by function?
+    :param recover: callback for recovering from exceptions in function
+    :param recover_fail: reraise exceptions when recovery fails?
+
+    .. note::
+        This function is a generator, the caller will need to consume this.
+
+    If fix_args or fix_kwargs are given, these are first used to create a
+    partially evaluated version of function.
+
+    The special :class:`__NotGiven` is used here to flag when optional arguments
+    are to be used.
+    """
+
+    my_function = function
+    if not isinstance(fix_args, __NotGiven):
+        my_function = partial(my_function, *fix_args)
+    if not isinstance(fix_kwargs, __NotGiven):
+        my_function = partial(my_function, **fix_kwargs)
+
+    if pass_exception:
+        my_function = try_except_pass(my_function, recover=recover, recover_fail=recover_fail)
+
+    if threads == 1:
+        for r in imap(my_function, args):
+            yield r
+    else:
+        pool = Pool(threads)
+        if unordered:
+            mapper = pool.imap_unordered
+        else:
+            mapper = pool.imap
+        for r in mapper(my_function, args, chunksize=chunksize):
+            yield r
+        pool.close()
+        pool.join()
 
 
 def kmer_overlap(kmers, moves=None, it=False):

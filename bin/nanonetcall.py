@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import argparse
 import os
+import math
 import sys
 import shutil
 import tempfile
@@ -14,7 +15,7 @@ from tang.util.cmdargs import FileExist, CheckCPU, AutoBool
 from tang.fast5 import fast5, iterate_fast5
 
 from nanonet import __currennt_exe__
-from nanonet.util import random_string
+from nanonet.util import random_string, tang_imap
 from nanonet.parse_currennt import CurrenntParserCaller
 from nanonet.features import make_currennt_basecall_input_multi
 
@@ -36,11 +37,13 @@ parser.add_argument("--output", type=str, required=True,
 parser.add_argument("--model", type=str, action=FileExist, required=True,
     help="Trained ANN.")
 parser.add_argument("--cuda", type=int, default=0,
-    help="CUDA device number, on AWS, it is one of 0, 1, 2, 3, check with nvidia-smi first, default 0." )
+    help="CUDA device number to use." )
 parser.add_argument("--nocuda", default=False, action='store_true',
     help="Use CPU for neural network calculations.")
-parser.add_argument("--jobs", default=1, type=int, action=CheckCPU,
-    help="No of Viterbi decoding jobs to run in parallel, using more than 1 cpus together with --use_trans will slow things down significantly.")
+parser.add_argument("--network_jobs", default=1, type=int, action=CheckCPU,
+    help="No of neural network jobs to run in parallel, only valid with --nocuda.")
+parser.add_argument("--decoding_jobs", default=1, type=int, action=CheckCPU,
+    help="No of Viterbi decoding jobs to run in parallel.")
 parser.add_argument("--nseqs", default=20, type=int,
     help="No. of sequences for currennt to process simultaneously. The upper limit is determined by --max_len and ANN size." )
 parser.add_argument("--trans", type=float, nargs='+', default=[0.1153, 0.6890, 0.1881, 0.0077],
@@ -55,6 +58,34 @@ parser.add_argument("--cache_path", default=tempfile.gettempdir(),
     help="Path for currennt cache files.")
 
 
+
+def process_features(workspace, modelfile, cache_path, cuda, nocuda, nseqs, inputfile):
+    i, inputfile = inputfile
+
+    # Currennt config file
+    currennt_cfg = os.path.join(workspace, 'currennt_{}.cfg'.format(i))
+    currennt_out = os.path.join(workspace, 'currennt_{}.out'.format(i))
+    with open(currennt_cfg, 'w') as cfg:    
+        cfg.write("network              = " + modelfile + "\n")
+        cfg.write("ff_input_file        = " + inputfile + "\n")
+        cfg.write("ff_output_file       = " + currennt_out + "\n")
+        cfg.write("ff_output_format     = single_csv\n")
+        cfg.write("input_noise_sigma    = 0.0\n")
+        cfg.write("parallel_sequences   = {}\n".format(nseqs))
+        cfg.write("cache_path           = " + cache_path + "\n")
+        if nocuda:
+            cfg.write("cuda             = false\n")   
+ 
+    # Run Currennt
+    os.environ["CURRENNT_CUDA_DEVICE"]="{}".format(cuda)
+    cmd = [__currennt_exe__, currennt_cfg]
+    with open(os.devnull, 'wb') as devnull:
+        subprocess.check_call(cmd, stdout=devnull, stderr=devnull)
+
+    return currennt_out
+
+
+
 if __name__ == "__main__":
     if len(sys.argv) == 1:
         sys.argv.append("-h")
@@ -62,6 +93,11 @@ if __name__ == "__main__":
 
     modelfile  = os.path.abspath(args.model)
     outputfile = os.path.abspath(args.output)
+
+    if args.nocuda:
+        args.nseqs = 1
+    else:
+        args.currennt_threads = 1 
 
     # User-defined workspace or use system tmp
     workspace = args.workspace
@@ -72,56 +108,48 @@ if __name__ == "__main__":
 
     # Create currennt input
     t0 = timeit.default_timer()
-    inputfile = None
+    inputs = []
     if os.path.isdir(args.input):
-        inputfile = os.path.join(workspace, 'basecall_features.netcdf')
+        inputfile = os.path.join(workspace, 'basecall_features_{}.netcdf')
         print "Creating training data NetCDF: {}".format(inputfile)
         fast5_files = list(iterate_fast5(args.input, paths=True, strand_list=args.strand_list, limit=args.limit))
-        make_currennt_basecall_input_multi(
-            fast5_files=fast5_files,
-            netcdf_file=inputfile,
-            phase=args.phase,
-            window=args.window,
-            min_len=args.min_len,
-            max_len=args.max_len)
-    else:
-        print "Using precomputed feature data: {}".format(inputfile)
-    inputfile = os.path.abspath(inputfile)
+        per_group = int(math.ceil(float(len(fast5_files)) / args.network_jobs))
+        for i, group in enumerate(fast5_files[i:i+per_group] for i in xrange(0, len(fast5_files), per_group)):
+            inputfile = inputfile.format(i)
+            inputs.append((i, os.path.abspath(inputfile)))
+            make_currennt_basecall_input_multi(
+                fast5_files=group,
+                netcdf_file=inputfile,
+                phase=args.phase,
+                window=args.window,
+                min_len=args.min_len,
+                max_len=args.max_len)
+    else:    
+        inputs.append((0, os.path.abspath(inputfile)))
+        print "Using precomputed feature data: {}".format(inputs[0])
     t1 = timeit.default_timer()
     print "Feature generation took {}s.".format(t1-t0)
 
-    # Currennt config file
-    currennt_cfg = os.path.join(workspace, 'currennt.cfg')
-    currennt_out = os.path.join(workspace, 'currennt.out')
-    with open(currennt_cfg, 'w') as cfg:    
-        cfg.write("network              = " + modelfile + "\n")
-        cfg.write("ff_input_file        = " + inputfile + "\n")
-        cfg.write("ff_output_file       = " + currennt_out + "\n")
-        cfg.write("ff_output_format     = single_csv\n")
-        cfg.write("input_noise_sigma    = 0.0\n")
-        cfg.write("parallel_sequences   = {}\n".format(args.nseqs))
-        cfg.write("cache_path           = " + args.cache_path + "\n")
-        if args.nocuda:
-            cfg.write("cuda             = false\n")   
- 
-    # Run Currennt
-    os.environ["CURRENNT_CUDA_DEVICE"]="{}".format(args.cuda)
-    cmd = [__currennt_exe__, currennt_cfg]
-    print "Running: {}".format(' '.join(cmd))
-    subprocess.check_call(cmd)
+    fix_args = [
+        workspace, modelfile, args.cache_path,
+        args.cuda, args.nocuda,
+        args.nseqs
+    ]
 
-    # Viterbi calls
-    print "Running decoding"
-    pstay   = args.trans[0]
-    pstep1  = args.trans[1]/4.0
-    pstep2  = args.trans[2]/16.0
-    pstep3  = args.trans[3]/44.0
-    
-    cpc = CurrenntParserCaller(fin=currennt_out, limit=args.limit, trans_free=args.trans_free, pstay=pstay, pstep1=pstep1, pstep2=pstep2, pstep3=pstep3)
+    pstay  = args.trans[0]
+    pstep1 = args.trans[1]/4.0
+    pstep2 = args.trans[2]/16.0
+    pstep3 = args.trans[3]/44.0
     with open(args.output, 'w') as fasta:
-        for result in cpc.basecalls(ncpus=args.jobs):
-            fasta.write(">{}\n{}\n".format(*result))   
- 
+        for currennt_out in tang_imap(process_features, inputs, fix_args=fix_args, threads=args.network_jobs):
+            # Viterbi calls
+            cpc = CurrenntParserCaller(
+                fin=currennt_out, limit=args.limit,
+                trans_free=args.trans_free, pstay=pstay, pstep1=pstep1, pstep2=pstep2, pstep3=pstep3
+            )
+            for result in cpc.basecalls(ncpus=args.decoding_jobs):
+                fasta.write(">{}\n{}\n".format(*result))
+
     # Clean up, should use a context manager...
     if args.workspace is None:
         shutil.rmtree(workspace)

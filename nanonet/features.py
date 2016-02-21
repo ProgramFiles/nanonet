@@ -10,10 +10,6 @@ from netCDF4 import Dataset
 ###
 from tang.fast5 import fast5
 
-
-
-
-
 ###
 ### TODO: replace this with a simple class that can just extract event data
 ###
