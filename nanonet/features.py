@@ -79,51 +79,55 @@ def basecall_features(filename, window=[-1, 0, 1], trim=10):
 
 
 def make_currennt_basecall_input_multi(fast5_files, netcdf_file, window=[-1, 0, 1], num_kmers=64, trim=10, min_len=1000, max_len=9000):
-     """Prepare a .netcdf file for input to currennt from .fast5 files.
+    """Prepare a .netcdf file for input to currennt from .fast5 files.
 
-     :param fast5_files:
-     :param netcdf_file:
-     :param window:
-     :param num_kmers:
-     :param trim:
-     :param min_len:
-     :param max_lan:
-     """
+    :param fast5_files:
+    :param netcdf_file:
+    :param window:
+    :param num_kmers:
+    :param trim:
+    :param min_len:
+    :param max_lan:
+    """
 
-     # We need to know ahead of time how wide our feature vector is, lets generate one and take a peek
-     X = basecall_features(fast5_files[0], window=window, trim=0)
-     inputPattSize = X.shape[1]
+    # We need to know ahead of time how wide our feature vector is, lets generate one and take a peek
+    X = basecall_features(fast5_files[0], window=window, trim=0)
+    inputPattSize = X.shape[1]
 
-     with Dataset(netcdf_file, 'w', format='NETCDF4') as ncroot:
-         # Set dimensions
-         ncroot.createDimension('numSeqs', None)
-         ncroot.createDimension('numLabels', num_kmers + 1)
-         ncroot.createDimension('maxSeqTagLength', 500)
-         ncroot.createDimension('numTimesteps', None)
-         ncroot.createDimension('inputPattSize', inputPattSize)
-         
-         # Set variables
-         seqTags = ncroot.createVariable('seqTags', 'S1',  ('numSeqs', 'maxSeqTagLength'))
-         seqLengths = ncroot.createVariable('seqLengths', 'i4', ('numSeqs',))
-         inputs = ncroot.createVariable('inputs', 'f4', ('numTimesteps', 'inputPattSize'))
-         targetClasses = ncroot.createVariable('targetClasses', 'i4', ('numTimesteps',))
+    reads_written = 0
+    with Dataset(netcdf_file, 'w', format='NETCDF4') as ncroot:
+        # Set dimensions
+        ncroot.createDimension('numSeqs', None)
+        ncroot.createDimension('numLabels', num_kmers + 1)
+        ncroot.createDimension('maxSeqTagLength', 500)
+        ncroot.createDimension('numTimesteps', None)
+        ncroot.createDimension('inputPattSize', inputPattSize)
+        
+        # Set variables
+        seqTags = ncroot.createVariable('seqTags', 'S1',  ('numSeqs', 'maxSeqTagLength'))
+        seqLengths = ncroot.createVariable('seqLengths', 'i4', ('numSeqs',))
+        inputs = ncroot.createVariable('inputs', 'f4', ('numTimesteps', 'inputPattSize'))
+        targetClasses = ncroot.createVariable('targetClasses', 'i4', ('numTimesteps',))
 
-         for f in fast5_files:
-             filename = os.path.basename(f)
-             X = basecall_features(f, window=window, trim=trim)
-             if len(X) < min_len or len(X) > max_len:
-                 continue
+        for f in fast5_files:
+            filename = os.path.basename(f)
+            X = basecall_features(f, window=window, trim=trim)
+            if len(X) < min_len or len(X) > max_len:
+                continue
 
-             numTimesteps = X.shape[0]             
-             _seqTags = np.zeros(500, dtype = "S1")
-             _seqTags[:len(filename)] = list(filename)
-             # Assign values to variables for each input file
-             curr_numSeqs = len(ncroot.dimensions["numSeqs"])
-             curr_numTimesteps = len(ncroot.dimensions["numTimesteps"])
-             
-             seqTags[curr_numSeqs] = _seqTags
-             seqLengths[curr_numSeqs] = numTimesteps
-             inputs[curr_numTimesteps:] = X
+            reads_written += 1
+            numTimesteps = X.shape[0]             
+            _seqTags = np.zeros(500, dtype = "S1")
+            _seqTags[:len(filename)] = list(filename)
+            # Assign values to variables for each input file
+            curr_numSeqs = len(ncroot.dimensions["numSeqs"])
+            curr_numTimesteps = len(ncroot.dimensions["numTimesteps"])
+            
+            seqTags[curr_numSeqs] = _seqTags
+            seqLengths[curr_numSeqs] = numTimesteps
+            inputs[curr_numTimesteps:] = X
+
+    return reads_written
 
 
 class SquiggleFeatureGenerator(object):
