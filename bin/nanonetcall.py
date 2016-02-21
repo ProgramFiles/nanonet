@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import argparse
 import os
+import re
 import math
 import sys
 import shutil
@@ -8,16 +9,15 @@ import tempfile
 import timeit
 import subprocess
 
-###
-### TODO: pull in these imports
-###
-from tang.util.cmdargs import FileExist, CheckCPU, AutoBool
-from tang.fast5 import fast5, iterate_fast5
-
 from nanonet import __currennt_exe__
+from nanonet.fast5 import Fast5, iterate_fast5
 from nanonet.util import random_string, tang_imap
+from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
 from nanonet.parse_currennt import CurrenntParserCaller
 from nanonet.features import make_currennt_basecall_input_multi
+
+import warnings
+warnings.simplefilter("ignore")
 
 parser = argparse.ArgumentParser(
     description="""A simple ANN 3-mer basecaller, works only on HMM basecall mapped data.""",
@@ -80,7 +80,26 @@ def process_features(workspace, modelfile, cache_path, cuda, nocuda, nseqs, inpu
     os.environ["CURRENNT_CUDA_DEVICE"]="{}".format(cuda)
     cmd = [__currennt_exe__, currennt_cfg]
     with open(os.devnull, 'wb') as devnull:
-        subprocess.check_call(cmd, stdout=devnull, stderr=devnull)
+        #subprocess.check_call(cmd)#, stdout=devnull, stderr=devnull)
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=devnull)
+        stdout, _ = p.communicate()
+        p.wait()
+        if p.returncode != 0:
+            # On windows currennt fails to remove the cache file. Check for
+            #   this and move on, else raise an error.
+            e = subprocess.CalledProcessError(2, ' '.join(cmd))
+            if os.name != 'nt':
+                raise e
+            else:
+                cache_file = re.match(
+                    '(FAILED: boost::filesystem::remove.*: )"(.*)"',
+                    stdout.splitlines()[-1])
+                if cache_file is not None:
+                    cache_file = cache_file.group(2)
+                    sys.stderr.write('currennt failed to clear its cache, cleaning up {}\n'.format(cache_file))
+                    os.unlink(cache_file)
+                else:
+                    raise e
 
     return currennt_out
 
@@ -97,7 +116,7 @@ if __name__ == "__main__":
     if args.nocuda:
         args.nseqs = 1
     else:
-        args.currennt_threads = 1 
+        args.network_jobs = 1
 
     # User-defined workspace or use system tmp
     workspace = args.workspace
@@ -106,12 +125,11 @@ if __name__ == "__main__":
     if not os.path.exists(workspace):
         os.makedirs(workspace)
 
-    # Create currennt input
-    t0 = timeit.default_timer()
+    # Create currennt input(s)
     inputs = []
     if os.path.isdir(args.input):
         inputfile = os.path.join(workspace, 'basecall_features_{}.netcdf')
-        print "Creating training data NetCDF: {}".format(inputfile)
+        print "Creating currennt input NetCDF(s): {}".format(inputfile)
         fast5_files = list(iterate_fast5(args.input, paths=True, strand_list=args.strand_list, limit=args.limit))
         per_group = int(math.ceil(float(len(fast5_files)) / args.network_jobs))
         for i, group in enumerate(fast5_files[i:i+per_group] for i in xrange(0, len(fast5_files), per_group)):
@@ -127,8 +145,6 @@ if __name__ == "__main__":
     else:    
         inputs.append((0, os.path.abspath(inputfile)))
         print "Using precomputed feature data: {}".format(inputs[0])
-    t1 = timeit.default_timer()
-    print "Feature generation took {}s.".format(t1-t0)
 
     fix_args = [
         workspace, modelfile, args.cache_path,
@@ -140,6 +156,9 @@ if __name__ == "__main__":
     pstep1 = args.trans[1]/4.0
     pstep2 = args.trans[2]/16.0
     pstep3 = args.trans[3]/44.0
+
+    print "Running basecalling. Network is running on {} {}(s) with decoding running on {} CPU(s)".format(
+        args.network_jobs, 'CPU' if args.nocuda else 'GPU', args.decoding_jobs)
     with open(args.output, 'w') as fasta:
         for currennt_out in tang_imap(process_features, inputs, fix_args=fix_args, threads=args.network_jobs):
             # Viterbi calls

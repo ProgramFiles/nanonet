@@ -5,40 +5,20 @@ import numpy as np
 import numpy.lib.recfunctions as nprf
 from netCDF4 import Dataset
 
-###
-### TODO: remove this
-###
-from tang.fast5 import fast5
+
+from nanonet.fast5 import Fast5
 
 ###
 ### TODO: replace this with a simple class that can just extract event data
 ###
-class MappingFast5(fast5):
+class MappingFast5(Fast5):
     """Basically an alternative interface to Fast5 files"""
     __phase_section__   = {'T':'template', 'C':'complement', '2d':'2d'}
     
     def get_events(self, phase='T'):
-        return self.get_section_events(self.__phase_section__[phase])
-    
-    def get_mapped_read(self, phase='T'):
-        events, _ = self.get_any_mapping_data(self.__phase_section__[phase])
-        return events
-    
-    def get_mapping_accuracy(self, direction="T"):
-        base = self.get_analysis_latest(self.__default_alignment_analysis__)
-        attr_path = self._join_path(base, self.__default_basecall_mapping_alignment_summary__.format(self.__phase_section__[direction]))
-
-        try:
-            attri = dict(self[attr_path].attrs)
-            return attri.get("accuracy", 0.0)
-        except:
-            return 0.0
- 
-    def get_ref(self, phase='T'):
-        try:
-            self.get_reference_fasta(self.__phase_section__[phase])
-        except:
-            return None
+        #return self.get_section_events(self.__phase_section__[phase])
+        # We've lied, we just return all events
+		return self.get_read()
 
 
 def padded_offset_array(array, pos):

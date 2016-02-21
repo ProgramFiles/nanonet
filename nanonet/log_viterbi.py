@@ -1,10 +1,12 @@
 import imp
+import os
 import numpy as np 
 from ctypes import c_int
 from numpy.ctypeslib import ndpointer
-from ctypes import cdll
+from ctypes import cdll, WinDLL
 
 clib = cdll.LoadLibrary(imp.find_module('clib_viterbi')[1])
+
 
 def make_log_trans(stay, kmers, step1, step2, step3, null_kmer=None):
     """Create a dense transition matrix from sparse parameters and kmer list.
