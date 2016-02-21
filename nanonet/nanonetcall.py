@@ -19,44 +19,47 @@ from nanonet.features import make_currennt_basecall_input_multi
 import warnings
 warnings.simplefilter("ignore")
 
-parser = argparse.ArgumentParser(
-    description="""A simple ANN 3-mer basecaller, works only on HMM basecall mapped data.""",
-    formatter_class=argparse.ArgumentDefaultsHelpFormatter
-)
 
-parser.add_argument("--input", action=FileExist, help="A path to fast5 files or a single netcdf file.", required=True)
-parser.add_argument("--strand_list", default=None, action=FileExist, help="List of reads to process.")
-parser.add_argument("--limit", default=None, type=int, help="Limit the number of input for processing.")
-parser.add_argument('--workspace', default=None, help='Workspace directory')
-parser.add_argument("--min_len", default=1000, type=int, help="Min. read length.")
-parser.add_argument("--max_len", default=9000, type=int, help="Max. read length.")
-parser.add_argument("--phase", default="T", choices=["T", "C"], help="Choice of phase.")
+def get_parser():
+    parser = argparse.ArgumentParser(
+        description="""A simple ANN 3-mer basecaller, works only on HMM basecall mapped data.""",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    
+    parser.add_argument("--input", action=FileExist, help="A path to fast5 files or a single netcdf file.", required=True)
+    parser.add_argument("--strand_list", default=None, action=FileExist, help="List of reads to process.")
+    parser.add_argument("--limit", default=None, type=int, help="Limit the number of input for processing.")
+    parser.add_argument('--workspace', default=None, help='Workspace directory')
+    parser.add_argument("--min_len", default=1000, type=int, help="Min. read length.")
+    parser.add_argument("--max_len", default=9000, type=int, help="Max. read length.")
+    parser.add_argument("--phase", default="T", choices=["T", "C"], help="Choice of phase.")
+    
+    parser.add_argument("--output", type=str, required=True,
+        help="Output name, output will be in fasta format.")
+    parser.add_argument("--model", type=str, action=FileExist, required=True,
+        help="Trained ANN.")
+    parser.add_argument("--cuda", type=int, default=0,
+        help="CUDA device number to use." )
+    parser.add_argument("--nocuda", default=False, action='store_true',
+        help="Use CPU for neural network calculations.")
+    parser.add_argument("--network_jobs", default=1, type=int, action=CheckCPU,
+        help="No of neural network jobs to run in parallel, only valid with --nocuda.")
+    parser.add_argument("--decoding_jobs", default=1, type=int, action=CheckCPU,
+        help="No of Viterbi decoding jobs to run in parallel.")
+    parser.add_argument("--nseqs", default=20, type=int,
+        help="No. of sequences for currennt to process simultaneously. The upper limit is determined by --max_len and ANN size." )
+    parser.add_argument("--trans", type=float, nargs='+', default=[0.1153, 0.6890, 0.1881, 0.0077],
+        help="Transition parameters, stay, step1, step2 and step3, to enable this, use --use_trans.")
+    parser.add_argument("--window", type=int, nargs='+', default=[-1, 0, 1],
+        help="The detailed list of the entire input window, default -1 0 1, tested with R7.3 to be optimal.")
+    parser.add_argument("--trans_free", action=AutoBool, default=True,
+        help="Estimate transition parameters by magic, the magic may suffer from some numerical issues.")
+    parser.add_argument("--use_trans", dest="trans_free", action="store_false",
+        help="Use fixed input transition parameters, no magic.")
+    parser.add_argument("--cache_path", default=tempfile.gettempdir(),
+        help="Path for currennt cache files.")
 
-parser.add_argument("--output", type=str, required=True,
-    help="Output name, output will be in fasta format.")
-parser.add_argument("--model", type=str, action=FileExist, required=True,
-    help="Trained ANN.")
-parser.add_argument("--cuda", type=int, default=0,
-    help="CUDA device number to use." )
-parser.add_argument("--nocuda", default=False, action='store_true',
-    help="Use CPU for neural network calculations.")
-parser.add_argument("--network_jobs", default=1, type=int, action=CheckCPU,
-    help="No of neural network jobs to run in parallel, only valid with --nocuda.")
-parser.add_argument("--decoding_jobs", default=1, type=int, action=CheckCPU,
-    help="No of Viterbi decoding jobs to run in parallel.")
-parser.add_argument("--nseqs", default=20, type=int,
-    help="No. of sequences for currennt to process simultaneously. The upper limit is determined by --max_len and ANN size." )
-parser.add_argument("--trans", type=float, nargs='+', default=[0.1153, 0.6890, 0.1881, 0.0077],
-    help="Transition parameters, stay, step1, step2 and step3, to enable this, use --use_trans.")
-parser.add_argument("--window", type=int, nargs='+', default=[-1, 0, 1],
-    help="The detailed list of the entire input window, default -1 0 1, tested with R7.3 to be optimal.")
-parser.add_argument("--trans_free", action=AutoBool, default=True,
-    help="Estimate transition parameters by magic, the magic may suffer from some numerical issues.")
-parser.add_argument("--use_trans", dest="trans_free", action="store_false",
-    help="Use fixed input transition parameters, no magic.")
-parser.add_argument("--cache_path", default=tempfile.gettempdir(),
-    help="Path for currennt cache files.")
-
+    return parser
 
 
 def process_features(workspace, modelfile, cache_path, cuda, nocuda, nseqs, inputfile):
@@ -104,11 +107,10 @@ def process_features(workspace, modelfile, cache_path, cuda, nocuda, nseqs, inpu
     return currennt_out
 
 
-
-if __name__ == "__main__":
+def main():
     if len(sys.argv) == 1:
         sys.argv.append("-h")
-    args = parser.parse_args()
+    args = get_parser().parse_args()
 
     modelfile  = os.path.abspath(args.model)
     outputfile = os.path.abspath(args.output)
@@ -172,3 +174,7 @@ if __name__ == "__main__":
     # Clean up, should use a context manager...
     if args.workspace is None:
         shutil.rmtree(workspace)
+
+
+if __name__ == "__main__":
+    main()

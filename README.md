@@ -120,7 +120,7 @@ Download prebuild boost libraries from:
 
     https://sourceforge.net/projects/boost/files/boost-binaries/1.55.0-build2/boost_1_55_0-msvc-12.0-64.exe/download
 
-and install to c:\boost_1_55_0 (this is not the default). If you choose a
+and install to `c:\boost_1_55_0` (this is not the default). If you choose a
 location you will have to modify the Visual Studio project.
 
 **Visual Studio**
@@ -172,7 +172,7 @@ Nanonet requires libraries for reading and writing HDF5 and netCDF4 files.
 These libraries ordinarily must be compiled from source, however Christophe
 Golke maintains a repository of compiled python wheels at:
 
-   http://www.lfd.uci.edu/~gohlke/pythonlibs/
+    http://www.lfd.uci.edu/~gohlke/pythonlibs/
 
 From this page locate and download the following packages:
 
@@ -184,27 +184,42 @@ For each of these run the following at a command prompt:
 
     pip install <package>
 
-__Compiling clib_viterbi__
+__Compiling c_log_viterbi.c and setting-up nanonet__
 
-The C components on nanonet all most easily compiled using the Visual Studio
-2013 compiler installed above. To do this from a command prompt run
+Nanonet contains small amounts of C code which must be compiled. The simplest
+way to have this compilation performed is to install the Microsoft Visual C++
+Compiler for Python 2.7. This can be found here:
+
+    https://www.microsoft.com/en-gb/download/details.aspx?id=44266
+
+Having installed this compiler nanonet one can simply run:
+
+    python setup.py install --user
+
+to install nanonet.
+
+If having two Visual Studio compilers on your system seems like overkill you
+can make use of the existing Visual Studio 2013 installed to compile currennt.
+To do this from a command prompt run:
 
     cd nanonet/nanonet
-	"C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin\x86_amd64\vcvarsx86_amd64.bat"
-	"C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin\x86_amd64\cl.exe" /LD c_log_viterbi.c /link /out:clib_viterbi.dll
+    "C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin\x86_amd64\vcvarsx86_amd64.bat"
+    "C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin\x86_amd64\cl.exe" /LD c_log_viterbi.c /link /out:data\clib_viterbi.dll
 
+Using this method you should run:
 
-__Setup nanonet__
+    python setup.py noext install --user
 
-To finally set up nanonet in order for use run:
-
-    cd nanonet
-    python setup.py develop install
-
-
+to instruct setuptools not to try compiling the C library itself. In this case
+the library will be loaded from the package data folder at runtime.
 
 Peforming basecalling
 ---------------------
+
+Nanonet provides a single program for basecalling Oxford Nanopore Technolgies'
+reads from .fast5 files. The output is as a single .fasta file.
+
+To test your installation 3 .fast5 files are provided.
 
 
 
