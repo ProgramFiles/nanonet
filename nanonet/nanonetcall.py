@@ -38,9 +38,9 @@ def get_parser():
         help="Limit the number of input for processing.")
     parser.add_argument('--workspace', default=None,
         help='Workspace directory')
-    parser.add_argument("--min_len", default=1000, type=int,
+    parser.add_argument("--min_len", default=500, type=int,
         help="Min. read length (events) to basecall.")
-    parser.add_argument("--max_len", default=9000, type=int,
+    parser.add_argument("--max_len", default=15000, type=int,
         help="Max. read length (events) to basecall.")
     
     parser.add_argument("--model", type=str, action=FileExist,
@@ -73,28 +73,43 @@ def get_parser():
     return parser
 
 
-def process_features(workspace, modelfile, cache_path, device, cuda, nseqs, inputfile):
-    i, inputfile = inputfile
+def process_reads(workspace, modelfile, cache_path, device, cuda, nseqs, inputfile, **kwargs):
+    """Run neural network over a set of fast5 files
+
+    :param workspace: directory in which to write intermediates and neural
+        network output.
+    :param: modelfile: neural network specification.
+    :param cache_path: cache path for currennt.
+    :param device: ID of CUDA device to use.
+    :param cuda: use cuda?
+    :param nseqs: no. of sequences to process in parallel.
+    """
+
+    batch, fast5s, netcdf = inputfile
+    make_currennt_basecall_input_multi(fast5s, netcdf_file=netcdf, **kwargs)
 
     # Currennt config file
-    currennt_cfg = os.path.join(workspace, 'currennt_{}.cfg'.format(i))
-    currennt_out = os.path.join(workspace, 'currennt_{}.out'.format(i))
+    currennt_cfg = os.path.join(workspace, 'currennt_{}.cfg'.format(batch))
+    currennt_out = os.path.join(workspace, 'currennt_{}.out'.format(batch))
+
+    def conf_line(option, value, pad=22):
+        return '{} = {}\n'.format(option.ljust(pad), value)
+
     with open(currennt_cfg, 'w') as cfg:    
-        cfg.write("network              = " + modelfile + "\n")
-        cfg.write("ff_input_file        = " + inputfile + "\n")
-        cfg.write("ff_output_file       = " + currennt_out + "\n")
-        cfg.write("ff_output_format     = single_csv\n")
-        cfg.write("input_noise_sigma    = 0.0\n")
-        cfg.write("parallel_sequences   = {}\n".format(nseqs))
-        cfg.write("cache_path           = " + cache_path + "\n")
+        cfg.write(conf_line('network', modelfile))
+        cfg.write(conf_line('ff_input_file', netcdf))
+        cfg.write(conf_line('ff_output_file', currennt_out))
+        cfg.write(conf_line('ff_output_format', 'single_csv'))
+        cfg.write(conf_line('input_noise_sigma', 0.0))
+        cfg.write(conf_line('parallel_sequences', nseqs))
+        cfg.write(conf_line('cache_path', cache_path))
         if not cuda:
-            cfg.write("cuda             = false\n")   
+            cfg.write(conf_line('cuda', 'false'))   
  
     # Run Currennt
     os.environ["CURRENNT_CUDA_DEVICE"]="{}".format(device)
     cmd = [__currennt_exe__, currennt_cfg]
     with open(os.devnull, 'wb') as devnull:
-        #subprocess.check_call(cmd)#, stdout=devnull, stderr=devnull)
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=devnull)
         stdout, _ = p.communicate()
         p.wait()
@@ -115,7 +130,7 @@ def process_features(workspace, modelfile, cache_path, device, cuda, nseqs, inpu
                 else:
                     raise e
 
-    return currennt_out
+    return batch, currennt_out
 
 
 def main():
@@ -137,39 +152,18 @@ def main():
     if not os.path.exists(workspace):
         os.makedirs(workspace)
 
-    # Create currennt input(s)
+    # Define currennt input(s)
+    inputfile_tmpl = os.path.join(workspace, 'basecall_features_{}.netcdf')
+    sys.stderr.write("Creating currennt input NetCDF(s): {}\n".format(inputfile_tmpl))
+    fast5_files = list(iterate_fast5(args.input, paths=True, strand_list=args.strand_list, limit=args.limit))
+    if args.batch is None:
+        batch_size = int(math.ceil(float(len(fast5_files)) / args.network_jobs))
+    else:
+        batch_size = args.batch
     inputs = []
-    if os.path.isdir(args.input):
-        inputfile_tmpl = os.path.join(workspace, 'basecall_features_{}.netcdf')
-        sys.stderr.write("Creating currennt input NetCDF(s): {}\n".format(inputfile_tmpl))
-        fast5_files = list(iterate_fast5(args.input, paths=True, strand_list=args.strand_list, limit=args.limit))
-        if args.batch is None:
-            batch_size = int(math.ceil(float(len(fast5_files)) / args.network_jobs))
-        else:
-            batch_size = args.batch
-        for i, group in enumerate(fast5_files[i:i+batch_size] for i in xrange(0, len(fast5_files), batch_size)):
-            inputfile = inputfile_tmpl.format(i)
-            inputs.append((i, os.path.abspath(inputfile)))
-            make_currennt_basecall_input_multi(
-                fast5_files=group,
-                netcdf_file=inputfile,
-                window=args.window,
-                min_len=args.min_len,
-                max_len=args.max_len)
-    else:    
-        inputs.append((0, os.path.abspath(inputfile)))
-        sys.stderr.write("Using precomputed feature data: {}\n".format(inputs[0]))
-
-    fix_args = [
-        workspace, modelfile, args.cache_path,
-        args.device, args.cuda,
-        args.nseqs
-    ]
-
-    pstay  = args.trans[0]
-    pstep1 = args.trans[1]/4.0
-    pstep2 = args.trans[2]/16.0
-    pstep3 = args.trans[3]/44.0
+    for i, group in enumerate(fast5_files[i:i+batch_size] for i in xrange(0, len(fast5_files), batch_size)):
+        inputfile = inputfile_tmpl.format(i)
+        inputs.append((i, group, os.path.abspath(inputfile)))         
 
     sys.stderr.write("Running basecalling. Network is running on {} {}(s) with"
         " decoding running on {} CPU(s). Batch size is {}.\n".format(
@@ -177,8 +171,28 @@ def main():
         args.decoding_jobs, batch_size)
     )
 
+    fix_args = [
+        workspace, modelfile, args.cache_path,
+        args.device, args.cuda,
+        args.nseqs
+    ]
+    fix_kwargs = {
+        'window':args.window,
+        'min_len':args.min_len,
+        'max_len':args.max_len
+    }
+
+    pstay  = args.trans[0]
+    pstep1 = args.trans[1]/4.0
+    pstep2 = args.trans[2]/16.0
+    pstep3 = args.trans[3]/44.0
+
+    t0 = timeit.default_timer()
+    n_reads = 0
+    n_bases = 0
     with FastaWrite(args.output) as fasta:
-        for currennt_out in tang_imap(process_features, inputs, fix_args=fix_args, threads=args.network_jobs):
+        for batch, currennt_out in tang_imap(process_reads, inputs, fix_args=fix_args, fix_kwargs=fix_kwargs, threads=args.network_jobs):
+            sys.stderr.write('Finished neural network processing for batch {}.\n'.format(batch))
             # Viterbi calls
             cpc = CurrenntParserCaller(
                 fin=currennt_out, trans_free=args.trans_free,
@@ -186,6 +200,11 @@ def main():
             )
             for result in cpc.basecalls(ncpus=args.decoding_jobs):
                 fasta.write(*result)
+                n_reads += 1
+                n_bases += len(result[1])
+            sys.stderr.write('Finished basecalling batch {}.\n'.format(batch))
+    t1 = timeit.default_timer()
+    sys.stderr.write('Processed {} reads ({} bases) in {}s\n'.format(n_reads, n_bases, t1 - t0))
 
     # Clean up, should use a context manager...
     if args.workspace is None:
