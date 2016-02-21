@@ -92,7 +92,7 @@ have a softlink to the /Developer folder present:
 
 Next use homebrew to install boost and netcdf:
 
-    brew install boost
+    brew install boost netcdf
 
 Currennt can then be built as for Ubuntu:
 
