@@ -7,16 +7,21 @@ from ctypes import cdll
 import pkg_resources 
 
 try:
-    lib_file = imp.find_module('clib_viterbi')[1]
+    # after 'python setup.py install' we should be able to do this
+    import clib_viterbi
 except:
-    # See README.md. We support two methods of compiling the C library.
-    #   If the Microsoft C++ Compiler for Python 2.7 is installed and
-    #   was used (via setup.py) the above should work as on Linux/OSX.
-    #   If instead the library was compiled by hand we load it from
-    #   package data.
-    lib_file = pkg_resources.resource_filename('nanonet', 'data/clib_viterbi.dll')
-finally:
-    clib = cdll.LoadLibrary(lib_file)
+    try:
+        # after 'python setup.py develop' this should work 
+        lib_file = imp.find_module('clib_viterbi')[1]
+    except:
+        # See README.md. We support two methods of compiling the C library.
+        #   If the Microsoft C++ Compiler for Python 2.7 is installed and
+        #   was used (via setup.py) the above should work as on Linux/OSX.
+        #   If instead the library was compiled by hand we load it from
+        #   package data.
+        lib_file = pkg_resources.resource_filename('nanonet', 'data/clib_viterbi.dll')
+    finally:
+        clib = cdll.LoadLibrary(lib_file)
 
 
 def make_log_trans(stay, kmers, step1, step2, step3, null_kmer=None):
