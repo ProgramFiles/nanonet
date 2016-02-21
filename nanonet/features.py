@@ -5,21 +5,7 @@ import numpy as np
 import numpy.lib.recfunctions as nprf
 from netCDF4 import Dataset
 
-
 from nanonet.fast5 import Fast5
-
-###
-### TODO: replace this with a simple class that can just extract event data
-###
-class MappingFast5(Fast5):
-    """Basically an alternative interface to Fast5 files"""
-    __phase_section__   = {'T':'template', 'C':'complement', '2d':'2d'}
-    
-    def get_events(self, phase='T'):
-        #return self.get_section_events(self.__phase_section__[phase])
-        # We've lied, we just return all events
-		return self.get_read()
-
 
 def padded_offset_array(array, pos):
     """Offset an array and pad with zeros.
@@ -68,18 +54,17 @@ def scale_array(X, with_mean=True, with_std=True, copy=True):
     return X
 
 
-def basecall_features(filename, window=[-1, 0, 1], phase='T', trim=10):
+def basecall_features(filename, window=[-1, 0, 1], trim=10):
     """Read events from a .fast5 and return feature vectors.
 
     :param filename: path of file to read.
     :param window: list specifying event offset positions from which to
         derive features. A short centered window is used by default.
-    :param phase: 'T' (template) or 'C' (complement).
     :param trim: number of feature vectors to trim from ends.
     """
 
-    with MappingFast5(filename) as f:
-        events = f.get_events(phase=phase)
+    with Fast5(filename) as f:
+        events = f.get_read()
     
     fg = SquiggleFeatureGenerator(events)
     for pos in window:
@@ -93,21 +78,20 @@ def basecall_features(filename, window=[-1, 0, 1], phase='T', trim=10):
     return X
 
 
-def make_currennt_basecall_input_multi(fast5_files, netcdf_file, window=[-1, 0, 1], num_kmers=64, phase="T", trim=10, min_len=1000, max_len=9000):
+def make_currennt_basecall_input_multi(fast5_files, netcdf_file, window=[-1, 0, 1], num_kmers=64, trim=10, min_len=1000, max_len=9000):
      """Prepare a .netcdf file for input to currennt from .fast5 files.
 
      :param fast5_files:
      :param netcdf_file:
      :param window:
      :param num_kmers:
-     :param phase:
      :param trim:
      :param min_len:
      :param max_lan:
      """
 
      # We need to know ahead of time how wide our feature vector is, lets generate one and take a peek
-     X = basecall_features(fast5_files[0], window=window, phase=phase, trim=0)
+     X = basecall_features(fast5_files[0], window=window, trim=0)
      inputPattSize = X.shape[1]
 
      with Dataset(netcdf_file, 'w', format='NETCDF4') as ncroot:
@@ -126,7 +110,7 @@ def make_currennt_basecall_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
 
          for f in fast5_files:
              filename = os.path.basename(f)
-             X = basecall_features(f, window=window, phase=phase, trim=trim)
+             X = basecall_features(f, window=window, trim=trim)
              if len(X) < min_len or len(X) > max_len:
                  continue
 

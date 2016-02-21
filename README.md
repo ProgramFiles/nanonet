@@ -67,7 +67,7 @@ Nanonet should then install quite trivially using the standard python
 mechanisms:
 
     cd nanonet
-    python setup.py install --user
+    python setup.py install
 
 
 Installation on OSX
@@ -107,7 +107,7 @@ The easiest way to install the netCDF dependencies is via homebrew:
 The python components can be installed using the setup script:
 
     cd nanonet
-    python setup.py install --user
+    python setup.py install
 
 
 Installation on Windows
@@ -154,7 +154,13 @@ from which you wish to run currennt:
     currennt.exe
 
 To the same location you should copy all .dll files located under the curennt
-folder.
+folder. In order for nanonet to execute currennt you should add this location
+to the environment variable `CURRENNT`. In Windows Powershell this can be done
+via:
+
+    $env:CURRENNT = "<Folder containing currennt.exe>"
+
+If you prefer you can append the location to your PATH environment variable.
 
 **Installing nanonet**
 
@@ -217,9 +223,60 @@ Peforming basecalling
 ---------------------
 
 Nanonet provides a single program for basecalling Oxford Nanopore Technolgies'
-reads from .fast5 files. The output is as a single .fasta file.
+reads from .fast5 files. The output is to stdout as fasta formatted sequences.
 
-To test your installation 3 .fast5 files are provided.
+If you followed the instructions above the program `nanonetcall` should be on
+your path. It requires a single argument:
+
+    nanonetcall {input_folder} > {output.fasta}
+
+To test your installation several .fast5 files are provided in the
+`example_data` folder of the source distribution.
+
+**Using a GPU**
+
+By default nanonetcall will not use a GPU to run the neural network. To enable
+use of a GPU specify the `--cuda` argument. In doing so one should also specify
+the `--nseqs <n>` option to alter how many inputs the GPU processes in parallel.
+For a GPU with 4GB a value of 25 is likely optimal. Note laptop versions of GPUs
+will not likely outperform their CPU equivalents.
+
+**Using multiple CPUs**
+
+By default nanonetcall will use a maximum of two CPUs, one each for running the
+neural network and running Viterbi decoding of the results of the network. The
+extent to which all requested CPUs are utilised depends on the dataset. To
+increase performance first increase the number of CPUs used for the network
+with the `--network_jobs <n>`. If you find that you are exhausting the system
+memory but have remaining CPU resource, you may also wish to utilise the option
+`--decoding_jobs <n>`.
+
+__Batching__
+
+By default the input dataset is split into batches determined by the option
+`--network_jobs`. If you wish to make improved use of the `--network_jobs`
+and `--decoding_jobs` you should specify also the `--batch <n>` options. This
+instructs nanonetcall to process at most `<n>` reads in a single batch.
+
+Using batch has the added benefit that final basecalls will be produced in a
+more streamed fashion, useful if you wish to pipe them to e.g. an alignment
+program.
 
 
+Trouble Shooting
+----------------
 
+If you performed a user install (`setup.py install --user`) the `nanonetcall`
+program may not be on your path. This is because the location into which
+setuptools installs programs for users is not often a default item in the
+user's path. On OSX the location is typically:
+
+    /Users/<username>/Library/Python/2.7/bin/
+
+whilst on Ubuntu it is:
+
+    ~/.local/bin
+
+If `nanonet` complains that it cannot locate the `currennt` executable you will
+need to set the `CURRENNT` environment variable to the location of the
+executable.

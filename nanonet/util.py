@@ -1,3 +1,4 @@
+import sys
 from itertools import tee, imap, izip, izip_longest, product
 from functools import partial
 from multiprocessing import Pool
@@ -33,6 +34,38 @@ def window(iterable, size):
         for each in iters[i:]:
             next(each, None)
     return izip(*iters)
+
+
+class FastaWrite(object):
+    def __init__(self, filename=None):
+        """Simple Fasta writer to file or stdout. The only task this
+        class achieves is formatting sequences into fixed line lengths.
+
+        :param filename: if `None` or '-' output is written to stdout
+            else it is written to a file opened with name `filename`.
+        :param mode: mode for opening file.
+        """
+        self.filename = filename
+
+    def __enter__(self):
+        if self.filename is not None and self.filename != '-':
+            self.fh = open(self.filename, 'w')
+        else:
+            self.fh = sys.stdout
+        return self
+
+    def __exit__(self, exception_type, exception_value, traceback):
+        if self.fh is not sys.stdout:
+            self.fh.close()
+
+    def write(self, name, seq, meta=None, line_length=80):
+        if meta is None:
+            self.fh.write(">{}\n".format(name))
+        else:
+            self.fh.write(">{}\n".format(name))
+        
+        for chunk in (seq[i:i+line_length] for i in xrange(0, len(seq), line_length)):
+            self.fh.write('{}\n'.format(chunk))
 
 
 def _try_except_pass(func, *args, **kwargs):
