@@ -90,6 +90,10 @@ have a softlink to the /Developer folder present:
 
     sudo ln -s /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer /Developer
 
+Next use homebrew to install boost and netcdf:
+
+    brew install boost
+
 Currennt can then be built as for Ubuntu:
 
     cd currennt
@@ -100,9 +104,6 @@ Currennt can then be built as for Ubuntu:
 
 
 **Installation of nanonet**
-The easiest way to install the netCDF dependencies is via homebrew:
-
-    brew install hdf5 netcdf
 
 The python components can be installed using the setup script:
 
