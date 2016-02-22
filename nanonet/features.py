@@ -6,14 +6,7 @@ import numpy.lib.recfunctions as nprf
 from netCDF4 import Dataset
 
 from nanonet.fast5 import Fast5
-
-### TODO:
-### Calling the NN on unsplit 2D data is disastorous
-### Currently nanonet.fast5.Fast5 cannot perform the
-### splitting so we import from tang
-###
-from tang.fast5 import fast5 as Fast5
-
+from nanonet.segment import split_hairpin
 
 
 def padded_offset_array(array, pos):
@@ -73,7 +66,8 @@ def basecall_features(filename, window=[-1, 0, 1], trim=10):
     """
 
     with Fast5(filename) as f:
-        events = f.get_section_events('template')
+        events = f.get_read()
+        events, res1 = split_hairpin(events)
     
     fg = SquiggleFeatureGenerator(events)
     for pos in window:
