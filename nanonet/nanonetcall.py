@@ -88,6 +88,7 @@ def process_reads(workspace, modelfile, cache_path, device, cuda, nseqs, inputfi
     batch, fast5s, netcdf = inputfile
     reads_written = make_currennt_basecall_input_multi(fast5s, netcdf_file=netcdf, **kwargs)
     if reads_written == 0:
+        sys.stderr.write('All reads filtered out in batch {}.\n'.format(batch))
         return batch, None
 
     # Currennt config file
@@ -132,6 +133,7 @@ def process_reads(workspace, modelfile, cache_path, device, cuda, nseqs, inputfi
                 else:
                     raise e
 
+    sys.stderr.write('Finished neural network processing for batch {}.\n'.format(batch))
     return batch, currennt_out
 
 
@@ -195,9 +197,7 @@ def main():
     with FastaWrite(args.output) as fasta:
         for batch, currennt_out in tang_imap(process_reads, inputs, fix_args=fix_args, fix_kwargs=fix_kwargs, threads=args.network_jobs):
             if currennt_out == None:
-                sys.stderr.write('All reads filtered out in batch {}.\n'.format(batch))
                 continue
-            sys.stderr.write('Finished neural network processing for batch {}.\n'.format(batch))
             # Viterbi calls
             cpc = CurrenntParserCaller(
                 fin=currennt_out, trans_free=args.trans_free,
