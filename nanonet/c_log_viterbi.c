@@ -1,3 +1,7 @@
+#define MODULE_API_EXPORTS
+#include "module.h"
+
+#include <Python.h>
 #include <stdlib.h>
 #include <float.h>
 #include <math.h>
@@ -19,7 +23,7 @@ int trans_map[] = { 0,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  
  * log_emmision_m: num_states x num_obs, each col is the prob for hidden states of current event
  * log_trans_p   : num_states x num_states
  **/
-__declspec(dllexport) void log_viterbi(double * log_emmision_m, double * log_trans_p, int num_states, int num_obs, int * vp){
+MODULE_API void log_viterbi(double * log_emmision_m, double * log_trans_p, int num_states, int num_obs, int * vp){
     //vm: num_states x num_obs
     double* vm   = calloc(num_states * num_obs, sizeof(double));
     double* path = calloc(num_states * num_obs, sizeof(double));
@@ -78,7 +82,7 @@ __declspec(dllexport) void log_viterbi(double * log_emmision_m, double * log_tra
  * log_emmision_m: num_states x num_obs, each col is the prob for hidden states of current event
  * 
  **/
-__declspec(dllexport) void log_viterbi_trans_free(double * log_emmision_m, int num_states, int num_obs, int * vp){
+MODULE_API void log_viterbi_trans_free(double * log_emmision_m, int num_states, int num_obs, int * vp){
     //vm: num_states x num_obs
     long double* vm   = calloc(num_states * num_obs, sizeof(long double));
     long double* path = calloc(num_states * num_obs, sizeof(long double));
