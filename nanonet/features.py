@@ -7,6 +7,15 @@ from netCDF4 import Dataset
 
 from nanonet.fast5 import Fast5
 
+### TODO:
+### Calling the NN on unsplit 2D data is disastorous
+### Currently nanonet.fast5.Fast5 cannot perform the
+### splitting so we import from tang
+###
+from tang.fast5 import fast5 as Fast5
+
+
+
 def padded_offset_array(array, pos):
     """Offset an array and pad with zeros.
     :param array: the array to offset.
@@ -64,7 +73,7 @@ def basecall_features(filename, window=[-1, 0, 1], trim=10):
     """
 
     with Fast5(filename) as f:
-        events = f.get_read()
+        events = f.get_section_events('template')
     
     fg = SquiggleFeatureGenerator(events)
     for pos in window:
