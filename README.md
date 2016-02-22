@@ -108,7 +108,9 @@ Currennt can then be built as for Ubuntu:
 The python components can be installed using the setup script:
 
     cd nanonet
-    python setup.py install
+    python setup.py develop --user
+    
+to perform an inplace install.
 
 
 Installation on Windows
