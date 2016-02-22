@@ -10,7 +10,7 @@ __eta__ = 1e-100
 
 # N.B. this defines the order of our states, it is not lexographical!
 def all_nmers(n=3):
-    return [''.join(x) for x in product('ATCG', repeat=3)]
+    return [''.join(x) for x in product('ATGC', repeat=3)]
 
 
 def random_string(length=6):
