@@ -3,6 +3,7 @@
 import argparse
 import os
 import sys
+import re
 import tempfile
 from subprocess import call
 
@@ -80,11 +81,12 @@ def main():
     ))
     
     # make training nc file
+    n_features, n_states = None, None
     if os.path.isdir(args.train):
         temp_file = '{}{}'.format(temp_name, 'train.netcdf')
         print "Creating training data NetCDF: {}".format(temp_file)
         fast5_files = list(iterate_fast5(trainfile, paths=True, strand_list=args.train_list))
-        n_chunks = make_currennt_training_input_multi(
+        n_chunks, n_features, n_states = make_currennt_training_input_multi(
             fast5_files=fast5_files, 
             netcdf_file=temp_file,
             window=args.window
@@ -107,7 +109,20 @@ def main():
         valfile=temp_file
     else:
         print "Using precomputed validation data: ".format(valfile)
-    
+
+    # Need to (possibly) fiddle the input model to conform to data
+    #   Could use a template instead of this...
+    if n_features is not None:
+        with open(modelfile, 'r') as model:
+            data = model.read()
+        data = data.replace('<n_features>', str(n_features))
+        data = data.replace('<n_states>', str(n_states))
+        modelfile = os.path.abspath(os.path.join(
+            args.workspace_path, 'input_model.jsn'
+        ))
+        with open(modelfile, 'w') as model:
+            model.write(data)
+
     # currennt cfg files
     currennt_cfg = tempfile.NamedTemporaryFile(delete=True) #TODO: this will fail on windows
     if not args.cuda:

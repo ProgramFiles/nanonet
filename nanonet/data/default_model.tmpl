@@ -1,7 +1,7 @@
 {
     "layers": [
         {
-            "size": 12,
+            "size": <n_features>,
             "name": "input",
             "type": "input"
         },
@@ -30,13 +30,13 @@
             "type": "feedforward_tanh"
         },
         {
-            "size": 65,
+            "size": <n_states>,
             "name": "output",
             "bias": 1.0,
             "type": "softmax"
         },
         {
-            "size": 65,
+            "size": <n_states>,
             "name": "postoutput",
             "type": "multiclass_classification"
         }

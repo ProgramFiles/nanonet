@@ -265,6 +265,34 @@ Using batch has the added benefit that final basecalls will be produced in a
 more streamed fashion, useful if you wish to pipe them to e.g. an alignment
 program.
 
+Training a network
+------------------
+
+The package provides also an interface to currennt for training networks from
+.fast5 files. The type of neural networks implemented by currennt require
+labelled input data. **Nanonet does not provide a method for labelling data**.
+It does however provide a hook to create labelled data.
+
+To run the trainer we specify training data, and validation data. The former
+will be used to train the network whilst the latter is used to check that the
+network does not become overtrained to the test data.
+
+    nanonettrain --train <training_data> --val <validation_data> \
+        --output <output_model_prefix> --model <input_model_spec>
+
+An example input model can be found in `nanonet/data/default_model.tmpl`.
+Currently the only supported models are those based on three-mers. (Though most
+of the code supported generic kmers, the C code for Viterbi decoding does not).
+The only other consideration is that the size of the first ("input") layer of
+the network must correspond to the featur vectors created by
+`nanonet.features.events_to_features`. The nanonettrain program will try to
+enforce these considerations. In contructing models one should assign the
+input layer a size of `<n_features>` and the final two layers as `<n_states>`,
+as in the example.
+
+Training is an intensive process, even on a GPU expect it to take hours not
+minutes. It is not recommended to attempt training models without GPU support.
+
 
 Trouble Shooting
 ----------------

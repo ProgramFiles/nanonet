@@ -240,7 +240,6 @@ def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
                     dtype=np.int16, count=len(labels)
                 )
             except Exception as e:
-                raise e
                 print "Skipping: {}".format(f)
             else:
                 print "Adding: {}".format(f)
@@ -262,7 +261,7 @@ def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
                     inputs[curr_numTimesteps:] = X_chunk
                     targetClasses[curr_numTimesteps:] = y_chunk
 
-    return chunks_written
+    return chunks_written, inputPattSize, len(all_kmers)
 
 
 class SquiggleFeatureGenerator(object):
