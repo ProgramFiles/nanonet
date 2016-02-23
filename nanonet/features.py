@@ -224,8 +224,6 @@ def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
 
         chunks_written = 0
         for i, f in enumerate(fast5_files):
-            X = events_to_features(get_events(f), window=window)
-            y = get_labels(f)
             try: # lot of stuff
                 # Run callbacks to get features and labels
                 X = events_to_features(get_events(f), window=window)
