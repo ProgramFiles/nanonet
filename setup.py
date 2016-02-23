@@ -62,7 +62,8 @@ setup(
     #test_suite='discover_tests',
     entry_points={
         'console_scripts': [
-            'nanonetcall = nanonet.nanonetcall:main'
+            'nanonetcall = nanonet.nanonetcall:main',
+            'nanonettrain = nanonet.nanonettrain:main'
         ]
     }
 )

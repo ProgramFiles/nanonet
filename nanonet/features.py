@@ -1,12 +1,14 @@
 import os
 import random
 import string
+from itertools import izip
 import numpy as np 
 import numpy.lib.recfunctions as nprf
 from netCDF4 import Dataset
 
 from nanonet.fast5 import Fast5
 from nanonet.segment import split_hairpin
+from nanonet.util import all_nmers
 
 
 def padded_offset_array(array, pos):
@@ -56,19 +58,13 @@ def scale_array(X, with_mean=True, with_std=True, copy=True):
     return X
 
 
-def basecall_features(filename, window=[-1, 0, 1], trim=10):
+def events_to_features(events, window=[-1, 0, 1]):
     """Read events from a .fast5 and return feature vectors.
 
     :param filename: path of file to read.
     :param window: list specifying event offset positions from which to
         derive features. A short centered window is used by default.
-    :param trim: number of feature vectors to trim from ends.
     """
-
-    with Fast5(filename) as f:
-        events = f.get_read()
-        events, res1 = split_hairpin(events)
-    
     fg = SquiggleFeatureGenerator(events)
     for pos in window:
         fg.add_mean_pos(pos)
@@ -76,8 +72,6 @@ def basecall_features(filename, window=[-1, 0, 1], trim=10):
         fg.add_dwell_pos(pos)
         fg.add_mean_diff_pos(pos)
     X = fg.to_numpy()
-    if trim > 0:
-       X = X[trim:-trim]
     return X
 
 
@@ -90,11 +84,14 @@ def make_currennt_basecall_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
     :param num_kmers:
     :param trim:
     :param min_len:
-    :param max_lan:
+    :param max_len:
     """
 
-    # We need to know ahead of time how wide our feature vector is, lets generate one and take a peek
-    X = basecall_features(fast5_files[0], window=window, trim=0)
+    # We need to know ahead of time how wide our feature vector is,
+    #    lets generate one and take a peek.
+    with Fast5(fast5_files[0]) as fh:
+        ev, _ = fh.get_read()
+    X = basecall_features(ev, window=window, trim=0)
     inputPattSize = X.shape[1]
 
     reads_written = 0
@@ -107,16 +104,24 @@ def make_currennt_basecall_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
         ncroot.createDimension('inputPattSize', inputPattSize)
         
         # Set variables
-        seqTags = ncroot.createVariable('seqTags', 'S1',  ('numSeqs', 'maxSeqTagLength'))
+        seqTags = ncroot.createVariable('seqTags', 'S1', ('numSeqs', 'maxSeqTagLength'))
         seqLengths = ncroot.createVariable('seqLengths', 'i4', ('numSeqs',))
         inputs = ncroot.createVariable('inputs', 'f4', ('numTimesteps', 'inputPattSize'))
         targetClasses = ncroot.createVariable('targetClasses', 'i4', ('numTimesteps',))
 
         for f in fast5_files:
             filename = os.path.basename(f)
-            X = basecall_features(f, window=window, trim=trim)
-            if len(X) < min_len or len(X) > max_len:
+            with Fast5(f) as fh:
+                # just get the template data
+                events, _ = split_hairpin(fh.get_read())
+            X = events_to_features(events, window=window)
+            try:
+                X = X[trim:-trim]
+            except:
                 continue
+            else:
+                if len(X) < min_len or len(X) > max_len:
+                    continue
 
             reads_written += 1
             numTimesteps = X.shape[0]             
@@ -131,6 +136,135 @@ def make_currennt_basecall_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
             inputs[curr_numTimesteps:] = X
 
     return reads_written
+
+
+def chunker(array, chunk_size):
+    for i in xrange(0, len(array), chunk_size):
+        yield array[i:i+chunk_size]
+
+
+def get_events_ont_mapping(filename, ):
+    """Scrape event-alignment data from .fast5
+    
+    :param filename: input file.
+    """
+    with Fast5(filename) as fh:
+        # just get template mapping data
+        events, _ = fh.get_any_mapping_data()
+    return events
+
+
+def get_labels_ont_mapping(filename, kmer_len=3):
+    """Scrape kmer labels from .fast5 file.
+
+    :param filename: input file.
+    :param kmer_len: length of kmers to return as labels.
+    """
+    bad_kmer = 'X'*kmer_len
+    with Fast5(filename) as fh:
+        # just get template mapping data
+        events, _ = fh.get_any_mapping_data()
+        base_kmer_len = len(events['kmer'][0])
+        if base_kmer_len < kmer_len:
+            raise ValueError(
+                'kmers in mapping file are {}mers, but requested {}mers.'.format(
+                base_kmer_len, kmer_len
+            ))
+        k1 = len(events['kmer'][0])/2 - 1
+        k2 = k1 + kmer_len
+        y = np.fromiter(
+            (k[k1:k2] for k in events['kmer']),
+            dtype='>S{}'.format(kmer_len),
+            count = len(events)
+        )
+        y[~events['good_emission']] = bad_kmer
+    return y
+
+
+def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 1], kmer_len=3, chunk_size=1000, min_chunk=900, trim=10, get_events=get_events_ont_mapping, get_labels=get_labels_ont_mapping):
+    """Write NetCDF file for training/validation input to currennt.
+
+    :param fast5_list:
+    :param netcdf_file:
+    :param window:
+
+    :param chunk_size:
+    :param min_chunk:
+    :param trim:
+    :param get_events:
+    :param get_labels:
+    """
+
+    # We need to know ahead of time how wide our feature vector is,
+    #    lets generate one and take a peek.
+    with Fast5(fast5_files[0]) as fh:
+        ev, _ = split_hairpin(fh.get_read())
+    X = events_to_features(ev, window=window)
+    inputPattSize = X.shape[1]
+
+    # Our state labels are kmers plus a junk kmer
+    all_kmers = all_nmers(kmer_len)
+    bad_kmer = 'X'*kmer_len
+    all_kmers.append(bad_kmer)
+    all_kmers = {k:i for i,k in enumerate(all_kmers)}
+
+    with Dataset(netcdf_file, "w", format="NETCDF4") as ncroot:
+        #Set dimensions
+        ncroot.createDimension('numSeqs', None)
+        ncroot.createDimension('numLabels', len(all_kmers))
+        ncroot.createDimension('maxSeqTagLength', 10)
+        ncroot.createDimension('numTimesteps', None)
+        ncroot.createDimension('inputPattSize', inputPattSize)
+
+        #Set variables
+        seqTags = ncroot.createVariable("seqTags", 'S1', ("numSeqs", "maxSeqTagLength"))
+        seqLengths = ncroot.createVariable("seqLengths", 'i4', ("numSeqs",))
+        inputs = ncroot.createVariable("inputs", 'f4', ("numTimesteps", "inputPattSize"))
+        targetClasses = ncroot.createVariable("targetClasses", 'i4', ("numTimesteps",))
+
+        chunks_written = 0
+        for i, f in enumerate(fast5_files):
+            X = events_to_features(get_events(f), window=window)
+            y = get_labels(f)
+            try: # lot of stuff
+                # Run callbacks to get features and labels
+                X = events_to_features(get_events(f), window=window)
+                labels = get_labels(f)
+
+                X = X[trim:-trim]
+                labels = labels[trim:-trim]
+                if len(X) != len(labels):
+                    raise RuntimeError('Length of features and labels not equal.')
+
+                # convert kmers to ints
+                y = np.fromiter(
+                    (all_kmers[k] for k in labels),
+                    dtype=np.int16, count=len(labels)
+                )
+            except Exception as e:
+                raise e
+                print "Skipping: {}".format(f)
+            else:
+                print "Adding: {}".format(f)
+                for chunk, (X_chunk, y_chunk) in enumerate(izip(chunker(X, chunk_size), chunker(y, chunk_size))):
+                    if len(X_chunk) < min_chunk:
+                        break
+                    chunks_written += 1 #should be the same as curr_numSeqs below
+
+                    seqname = "S{}_{}".format(i, chunk)
+                    _seqTags = np.zeros(10, dtype="S1")
+                    _seqTags[:len(seqname)] = list(seqname)
+
+                    numTimesteps = len(X_chunk)
+                    curr_numSeqs = len(ncroot.dimensions["numSeqs"])
+                    curr_numTimesteps = len(ncroot.dimensions["numTimesteps"])
+
+                    seqTags[curr_numSeqs] = _seqTags
+                    seqLengths[curr_numSeqs] = numTimesteps
+                    inputs[curr_numTimesteps:] = X_chunk
+                    targetClasses[curr_numTimesteps:] = y_chunk
+
+    return chunks_written
 
 
 class SquiggleFeatureGenerator(object):

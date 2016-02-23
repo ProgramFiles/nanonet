@@ -10,9 +10,9 @@ import timeit
 import subprocess
 import pkg_resources
 
-from nanonet import __currennt_exe__
+from nanonet import run_currennt
 from nanonet.fast5 import Fast5, iterate_fast5
-from nanonet.util import random_string, FastaWrite, tang_imap
+from nanonet.util import random_string, conf_line, FastaWrite, tang_imap
 from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
 from nanonet.parse_currennt import CurrenntParserCaller
 from nanonet.features import make_currennt_basecall_input_multi
@@ -95,9 +95,6 @@ def process_reads(workspace, modelfile, cache_path, device, cuda, nseqs, inputfi
     currennt_cfg = os.path.join(workspace, 'currennt_{}.cfg'.format(batch))
     currennt_out = os.path.join(workspace, 'currennt_{}.out'.format(batch))
 
-    def conf_line(option, value, pad=22):
-        return '{} = {}\n'.format(option.ljust(pad), value)
-
     with open(currennt_cfg, 'w') as cfg:    
         cfg.write(conf_line('network', modelfile))
         cfg.write(conf_line('ff_input_file', netcdf))
@@ -110,29 +107,7 @@ def process_reads(workspace, modelfile, cache_path, device, cuda, nseqs, inputfi
             cfg.write(conf_line('cuda', 'false'))   
  
     # Run Currennt
-    os.environ["CURRENNT_CUDA_DEVICE"]="{}".format(device)
-    cmd = [__currennt_exe__, currennt_cfg]
-    with open(os.devnull, 'wb') as devnull:
-        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=devnull)
-        stdout, _ = p.communicate()
-        p.wait()
-        if p.returncode != 0:
-            # On windows currennt fails to remove the cache file. Check for
-            #   this and move on, else raise an error.
-            e = subprocess.CalledProcessError(2, ' '.join(cmd))
-            if os.name != 'nt':
-                raise e
-            else:
-                cache_file = re.match(
-                    '(FAILED: boost::filesystem::remove.*: )"(.*)"',
-                    stdout.splitlines()[-1])
-                if cache_file is not None:
-                    cache_file = cache_file.group(2)
-                    sys.stderr.write('currennt failed to clear its cache, cleaning up {}\n'.format(cache_file))
-                    os.unlink(cache_file)
-                else:
-                    raise e
-
+    run_current(currennt_cfg, device)
     sys.stderr.write('Finished neural network processing for batch {}.\n'.format(batch))
     return batch, currennt_out
 
