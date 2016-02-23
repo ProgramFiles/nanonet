@@ -26,29 +26,6 @@ def conf_line(option, value, pad=30):
     return '{} = {}\n'.format(option.ljust(pad), value)
 
 
-class ReplWrapper(object):
-    def __init__(self, replacement, occurrence):
-        """Replace Nth (or all if occurrence=0) of regex match with
-        replacement in a string.
-
-        e.g.
-        data = re.sub(r'target', ReplWrapper(r'replace', 1)
-        """
-
-        self.count = 0
-        self.replacement = replacement
-        self.occurrence = occurrence
-    def repl(self, match):
-        self.count += 1
-        if self.occurrence == 0 or self.occurrence == self.count:
-            return match.expand(self.replacement)
-        else:
-            try:
-                return match.group(0)
-            except IndexError:
-                return match.group(0)
-
-
 def window(iterable, size):
     """Create an iterator returning a sliding window from another iterator.
 

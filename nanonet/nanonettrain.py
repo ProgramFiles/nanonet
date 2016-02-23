@@ -3,7 +3,6 @@
 import argparse
 import os
 import sys
-import re
 import tempfile
 from subprocess import call
 
