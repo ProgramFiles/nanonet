@@ -935,6 +935,11 @@ def iterate_fast5(path, strand_list=None, paths=False, mode='r', limit=None):
             files = glob(os.path.join(path, '*.fast5'))
         else:
             files = [path]
+    elif os.path.isfile(strand_list):
+        names = np.genfromtxt(
+            strand_list, delimiter='\t', dtype=None, names=True
+        )['filename']
+        files = [os.path.join(path, x) for x in names]
     else:
         files = [os.path.join(path, x) for x in strand_list]
         

@@ -13,7 +13,6 @@ from nanonet.features import make_currennt_training_input_multi
 from nanonet.util import random_string, conf_line
 
 from nanonet import fast5
-print fast5
 
 def get_parser():
     parser = argparse.ArgumentParser(
