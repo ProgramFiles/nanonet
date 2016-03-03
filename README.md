@@ -27,7 +27,7 @@ versions of this package, a local and a network install. Here we use the
 network package.
 
     # Install NVIDIA's meta package
-    wget http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1410/x86_64/cuda-repo-ubuntu1410_7.0-28_amd64.deb
+    wget http://developer.download.nvidia.com/compute/cuda/7.5/Prod/local_installers/cuda-repo-ubuntu1404-7-5-local_7.5-18_amd64.deb
     sudo dpkg -i cuda-repo-ubuntu1410_7.0-28_amd64.deb
 
     sudo apt-get update
