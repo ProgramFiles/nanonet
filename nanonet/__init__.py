@@ -1,4 +1,5 @@
 import os
+import sys
 import re
 import subprocess
 
@@ -29,6 +30,7 @@ def run_currennt(currennt_cfg, device=0):
             #   this and move on, else raise an error.
             e = subprocess.CalledProcessError(2, ' '.join(cmd))
             if os.name != 'nt':
+                sys.stderr.write(stdout)
                 raise e
             else:
                 cache_file = re.match(
@@ -39,4 +41,5 @@ def run_currennt(currennt_cfg, device=0):
                     sys.stderr.write('currennt failed to clear its cache, cleaning up {}\n'.format(cache_file))
                     os.unlink(cache_file)
                 else:
+                    sys.stderr.write(stdout)
                     raise e

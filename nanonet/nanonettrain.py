@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 
 import argparse
+import json
 import os
 import sys
+import pkg_resources
 import tempfile
-from subprocess import call
+import subprocess
 
 from nanonet import __currennt_exe__
 from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
@@ -24,6 +26,8 @@ def get_parser():
         help="Input training data, either a path to fast5 files or a single netcdf file", required=True)
     parser.add_argument("--train_list", action=FileExist, default=None,
         help="Strand list constaining training set")
+    parser.add_argument("--section", default='template', choices=('template', 'complement'),
+        help="Section of reads to train")
     
     parser.add_argument("--val", action=FileExist,
         help="Input validation data, either a path to fast5 files or a single netcdf file", required=True)
@@ -33,8 +37,12 @@ def get_parser():
         help="Path for storing training and validation NetCDF files, if not specified a temporary file is used.")
     
     parser.add_argument("--output", help="Output prefix", required=True)
+
     parser.add_argument("--model", action=FileExist,
-        help="ANN configuration file", required=True)
+        default=pkg_resources.resource_filename('nanonet', 'data/default_model.tmpl'),
+        help="ANN configuration file")
+    parser.add_argument("--model_params", nargs=2, default=(None, None),
+        help="Specify n_features and n_classes for templated models.")
     parser.add_argument("--device", type=int, default=0,
         help="ID of CUDA device to use.")
     parser.add_argument("--cuda", default=False, action=AutoBool,
@@ -79,7 +87,7 @@ def main():
     ))
     
     # make training nc file
-    n_features, n_states = None, None
+    n_features, n_states = args.model_params
     if os.path.isdir(args.train):
         temp_file = '{}{}'.format(temp_name, 'train.netcdf')
         print "Creating training data NetCDF: {}".format(temp_file)
@@ -87,13 +95,20 @@ def main():
         n_chunks, n_features, n_states = make_currennt_training_input_multi(
             fast5_files=fast5_files, 
             netcdf_file=temp_file,
-            window=args.window
+            window=args.window,
+            callback_kwargs={'section':args.section}
         )
         if n_chunks == 0:
             raise RuntimeError("No training data written.")
         trainfile = temp_file
     else:
         print "Using precomputed training data: {}".format(trainfile)
+        with open(modelfile, 'r') as model:
+            data = model.read()
+        if '<n_features>' in data and args.model_params == (None, None):
+            print "To use precomputed features must specify --model_params\n"
+            sys.exit(1)
+
     
     # make validation nc file
     if os.path.isdir(args.val):
@@ -103,43 +118,55 @@ def main():
         make_currennt_training_input_multi(
             fast5_files=fast5_files, 
             netcdf_file=temp_file, 
-            window=args.window)
+            window=args.window,
+            callback_kwargs={'section':args.section}
+        )
         valfile=temp_file
     else:
         print "Using precomputed validation data: ".format(valfile)
-
-    # Need to (possibly) fiddle the input model to conform to data
-    #   Could use a template instead of this...
-    if n_features is not None:
         with open(modelfile, 'r') as model:
             data = model.read()
-        data = data.replace('<n_features>', str(n_features))
-        data = data.replace('<n_states>', str(n_states))
-        modelfile = os.path.abspath(os.path.join(
-            args.workspace_path, 'input_model.jsn'
-        ))
-        with open(modelfile, 'w') as model:
-            model.write(data)
+        if '<n_features>' in data and args.model_params == (None, None):
+            print "To use precomputed features must specify --model_params\n"
+            sys.exit(1)
+
+    # fill-in templated items in model
+    with open(modelfile, 'r') as model:
+        mod = model.read()
+    mod = mod.replace('<section>', args.section)
+    mod = mod.replace('<n_features>', str(n_features))
+    mod = mod.replace('<n_states>', str(n_states))
+    try:
+        mod_meta = json.loads(mod)['meta']
+    except Exception as e:
+        mod_meta = None
+
+    modelfile = os.path.abspath(os.path.join(
+        args.workspace_path, 'input_model.jsn'
+    ))
+    with open(modelfile, 'w') as model:
+        model.write(mod)
 
     # currennt cfg files
     currennt_cfg = tempfile.NamedTemporaryFile(delete=True) #TODO: this will fail on windows
+    final_network = "{}_final.jsn".format(outputfile)
     if not args.cuda:
         currennt_cfg.write(conf_line('cuda', 'false'))
-    #IO
+    # IO
     currennt_cfg.write(conf_line("cache_path", args.cache_path))
     currennt_cfg.write(conf_line("network", modelfile))
     currennt_cfg.write(conf_line("train_file", trainfile))
     currennt_cfg.write(conf_line("val_file", valfile))
-    currennt_cfg.write(conf_line("save_network", "{}_final.jsn".format(outputfile)))
+    currennt_cfg.write(conf_line("save_network", final_network))
     currennt_cfg.write(conf_line("autosave_prefix", "{}_auto".format(outputfile)))
-    #Tunable parameters
+    # Tunable parameters
     currennt_cfg.write(conf_line("max_epochs", args.max_epochs))
     currennt_cfg.write(conf_line("max_epochs_no_best", args.max_epochs_no_best))
     currennt_cfg.write(conf_line("validate_every", args.validate_every))
     currennt_cfg.write(conf_line("parallel_sequences", args.parallel_sequences))
     currennt_cfg.write(conf_line("learning_rate", args.learning_rate))
     currennt_cfg.write(conf_line("momentum", args.momentum))
-    #Fixed parameters
+    # Fixed parameters
     currennt_cfg.write(conf_line("train", "true"))
     currennt_cfg.write(conf_line("weights_dist", "normal"))
     currennt_cfg.write(conf_line("weights_normal_sigma", "0.1"))
@@ -155,7 +182,14 @@ def main():
     cmd = [__currennt_exe__, currennt_cfg.name]
     os.environ["CURRENNT_CUDA_DEVICE"]="{}".format(args.device)
     print "\n\nRunning: {}".format(' '.join(cmd))
-    call(cmd)
+    subprocess.check_call(cmd)
+
+    # Currennt won't pass through our meta in the model, amend the output
+    if mod_meta is not None:
+        print "Adding model meta to currennt final network"
+        mod = json.load(open(final_network, 'r'))
+        mod['meta'] = mod_meta
+        json.dump(mod, open(final_network, 'w'))
 
 
 if __name__ == '__main__':

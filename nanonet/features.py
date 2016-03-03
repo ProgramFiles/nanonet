@@ -75,23 +75,24 @@ def events_to_features(events, window=[-1, 0, 1]):
     return X
 
 
-def make_currennt_basecall_input_multi(fast5_files, netcdf_file, window=[-1, 0, 1], num_kmers=64, trim=10, min_len=1000, max_len=9000):
+def make_currennt_basecall_input_multi(fast5_files, netcdf_file, section='template', window=[-1, 0, 1], num_kmers=64, trim=10, min_len=1000, max_len=9000):
     """Prepare a .netcdf file for input to currennt from .fast5 files.
 
-    :param fast5_files:
-    :param netcdf_file:
-    :param window:
-    :param num_kmers:
-    :param trim:
-    :param min_len:
-    :param max_len:
+    :param fast5_files: list of .fast5 files to process
+    :param netcdf_file: output .netcdf file
+    :param section: template or complement
+    :param window: event window to derive features
+    :param num_kmers: no. of (true) kmers in model
+    :param trim: no. of feature vectors to trim (from either end)
+    :param min_len: minimum length of read to consider
+    :param max_len: maximum length of read to consider
     """
 
     # We need to know ahead of time how wide our feature vector is,
     #    lets generate one and take a peek.
     with Fast5(fast5_files[0]) as fh:
-        ev, _ = fh.get_read()
-    X = basecall_features(ev, window=window, trim=0)
+        ev = fh.get_read()
+    X = events_to_features(ev, window=window)
     inputPattSize = X.shape[1]
 
     reads_written = 0
@@ -112,8 +113,7 @@ def make_currennt_basecall_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
         for f in fast5_files:
             filename = os.path.basename(f)
             with Fast5(f) as fh:
-                # just get the template data
-                events, _ = split_hairpin(fh.get_read())
+                events, _ = split_hairpin(fh.get_read(), section=section)
             X = events_to_features(events, window=window)
             try:
                 X = X[trim:-trim]
@@ -139,31 +139,37 @@ def make_currennt_basecall_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
 
 
 def chunker(array, chunk_size):
+    """Yield non-overlapping chunks of input.
+
+    :param array: list-like input
+    :param chunk_size: output chunk size
+    """
     for i in xrange(0, len(array), chunk_size):
         yield array[i:i+chunk_size]
 
 
-def get_events_ont_mapping(filename, ):
+def get_events_ont_mapping(filename, section='template'):
     """Scrape event-alignment data from .fast5
     
     :param filename: input file.
+    :param section: template or complement
     """
     with Fast5(filename) as fh:
-        # just get template mapping data
-        events, _ = fh.get_any_mapping_data()
+        events, _ = fh.get_any_mapping_data(section=section)
     return events
 
 
-def get_labels_ont_mapping(filename, kmer_len=3):
+def get_labels_ont_mapping(filename, kmer_len=3, section='template'):
     """Scrape kmer labels from .fast5 file.
 
     :param filename: input file.
     :param kmer_len: length of kmers to return as labels.
+    :param section: template or complement
     """
     bad_kmer = 'X'*kmer_len
     with Fast5(filename) as fh:
         # just get template mapping data
-        events, _ = fh.get_any_mapping_data()
+        events, _ = fh.get_any_mapping_data(section=section)
         base_kmer_len = len(events['kmer'][0])
         if base_kmer_len < kmer_len:
             raise ValueError(
@@ -181,18 +187,18 @@ def get_labels_ont_mapping(filename, kmer_len=3):
     return y
 
 
-def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 1], kmer_len=3, chunk_size=1000, min_chunk=900, trim=10, get_events=get_events_ont_mapping, get_labels=get_labels_ont_mapping):
+def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 1], kmer_len=3, chunk_size=1000, min_chunk=900, trim=10, get_events=get_events_ont_mapping, get_labels=get_labels_ont_mapping, callback_kwargs={'section':'template'}):
     """Write NetCDF file for training/validation input to currennt.
 
-    :param fast5_list:
-    :param netcdf_file:
-    :param window:
-
-    :param chunk_size:
-    :param min_chunk:
-    :param trim:
-    :param get_events:
-    :param get_labels:
+    :param fast5_list: list of .fast5 files to process
+    :param netcdf_file: output .netcdf file 
+    :param window: event window to derive features
+    :param chunk_size: chunk size to break reads into for SGE batching
+    :param min_chunk: minimum chunk size (used to discard remainder of reads
+    :param trim: no. of feature vectors to trim (from either end)
+    :param get_events: callback to return event data, will be passed .fast5 filename
+    :param get_labels: callback to return event kmer labels, will be passed .fast5 filename
+    :param callback_kwargs: kwargs for both `get_events` and `get_labels`
     """
 
     # We need to know ahead of time how wide our feature vector is,
@@ -226,8 +232,8 @@ def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
         for i, f in enumerate(fast5_files):
             try: # lot of stuff
                 # Run callbacks to get features and labels
-                X = events_to_features(get_events(f), window=window)
-                labels = get_labels(f)
+                X = events_to_features(get_events(f, **callback_kwargs), window=window)
+                labels = get_labels(f, **callback_kwargs)
 
                 X = X[trim:-trim]
                 labels = labels[trim:-trim]

@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import argparse
+import json
 import os
 import re
 import math
@@ -29,6 +30,8 @@ def get_parser():
     
     parser.add_argument("input", action=FileExist,
         help="A path to fast5 files or a single netcdf file.")
+    parser.add_argument("--section", default=None, choices=('template', 'complement'),
+        help="Section of read for which to produce basecalls, will override that stored in model file.")
 
     parser.add_argument("--output", type=str,
         help="Output name, output will be in fasta format.")
@@ -107,7 +110,7 @@ def process_reads(workspace, modelfile, cache_path, device, cuda, nseqs, inputfi
             cfg.write(conf_line('cuda', 'false'))   
  
     # Run Currennt
-    run_current(currennt_cfg, device)
+    run_currennt(currennt_cfg, device)
     sys.stderr.write('Finished neural network processing for batch {}.\n'.format(batch))
     return batch, currennt_out
 
@@ -118,6 +121,12 @@ def main():
     args = get_parser().parse_args()
 
     modelfile  = os.path.abspath(args.model)
+    if args.section is None:
+        try:
+            args.section = json.load(open(modelfile))['meta']['section']
+        except:
+            print "No 'section' found in modelfile, try specifying --section."
+            sys.exit(1)
 
     if args.cuda:
         args.network_jobs = 1
@@ -144,9 +153,9 @@ def main():
         inputfile = inputfile_tmpl.format(i)
         inputs.append((i, group, os.path.abspath(inputfile)))         
 
-    sys.stderr.write("Running basecalling. Network is running on {} {}(s) with"
+    sys.stderr.write("Running basecalling for {} sections. Network is running on {} {}(s) with"
         " decoding running on {} CPU(s). Batch size is {}.\n".format(
-        args.network_jobs, 'GPU' if args.cuda else 'CPU',
+        args.section, args.network_jobs, 'GPU' if args.cuda else 'CPU',
         args.decoding_jobs, batch_size)
     )
 
@@ -158,7 +167,8 @@ def main():
     fix_kwargs = {
         'window':args.window,
         'min_len':args.min_len,
-        'max_len':args.max_len
+        'max_len':args.max_len,
+        'section':args.section
     }
 
     pstay  = args.trans[0]
