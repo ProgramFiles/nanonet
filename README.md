@@ -21,38 +21,11 @@ modifications to that which is available on
 https://sourceforge.net/projects/currennt/. The changes serve to allow
 currennt to run with current versions of Nvidia graphics cards and libraries.
 
-Compilation of currennt requires a few dependencies to be fulfilled. We must
-first install the NVIDIA CUDA libaries. Note that the NVIDIA website has two
-versions of this package, a local and a network install. Here we use the
-network package.
+The modified distribution of currennt may be found at:
+https://github.com/nanoporetech/currennt
 
-    # Install NVIDIA's meta package
-    wget http://developer.download.nvidia.com/compute/cuda/7.5/Prod/local_installers/cuda-repo-ubuntu1404-7-5-local_7.5-18_amd64.deb
-    sudo dpkg -i cuda-repo-ubuntu1404-7-5-local_7.5-18_amd64.deb
-
-    sudo apt-get update
-    sudo apt-get install -y cuda
-
-At this point if you wish to use a GPU with currennt you will need to restart
-your machine. Upon restart issuing the command:
-
-    nvidia-smi
-
-should show information about your GPU.
-
-Building currennt has some further, more standard, requirements:
-
-    sudo apt-get install libboost-all-dev libnetcdf-dev netcdf-bin cmake
-
-after which we can build currennt:
-
-    cd currennt
-    mkdir build && cd build
-    cmake ..
-    make
-    sudo cp currennt /usr/local/bin
-
-A successful build will result in a single executable file named `currennt`.
+Installation notes may be found at
+https://github.com/nanoporetech/currennt/blob/master/Makefile
 
 **Installation of nanonet**
 
