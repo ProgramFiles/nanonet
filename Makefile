@@ -1,5 +1,8 @@
 .PHONY: install develop clean
 
+deb:
+	rm -rf deb_dist dist
+	python setup.py --command-packages=stdeb.command sdist_dsc bdist_deb
 
 install:
 	python setup.py install

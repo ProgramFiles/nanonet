@@ -30,10 +30,14 @@ c_compile_args = [
     '-fstrict-aliasing', '-O3', '-march=native'
 ]
 
+nanonet_dir = os.path.join(os.path.dirname(__file__), 'nanonet')
+
 extensions = []
 extensions.append(Extension(
     'clib_viterbi',
-    sources=[os.path.join(os.path.dirname(__file__), 'nanonet', 'c_log_viterbi.c')],
+    include_dirs=[nanonet_dir],
+    sources=[os.path.join(nanonet_dir, 'c_log_viterbi.c')],
+    depends=[os.path.join(nanonet_dir, 'module.h')],
     extra_compile_args=c_compile_args
 ))
 
