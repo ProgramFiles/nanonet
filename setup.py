@@ -57,6 +57,7 @@ setup(
     cmdclass={'noext':EnsureClibs},
     packages=find_packages(exclude=["*.test", "*.test.*", "test.*", "test"]),
     package_data={'nanonet.data':['nanonet/data/*']},
+    include_package_data=True,
     tests_require=requires,
     install_requires=requires,
     dependency_links=[],
