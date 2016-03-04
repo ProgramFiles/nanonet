@@ -37,7 +37,6 @@ extensions.append(Extension(
     'clib_viterbi',
     include_dirs=[nanonet_dir],
     sources=[os.path.join(nanonet_dir, 'c_log_viterbi.c')],
-    depends=[os.path.join(nanonet_dir, 'module.h')],
     extra_compile_args=c_compile_args
 ))
 
@@ -49,7 +48,7 @@ requires=[
 
 
 setup(
-    name='Nanonet',
+    name='nanonet',
     version=0.1,
     description='A simple recurrent neural network based basecaller nanopore data.',
     maintainer='Chris Wright',
@@ -66,7 +65,8 @@ setup(
     #test_suite='discover_tests',
     entry_points={
         'console_scripts': [
-            'nanonetcall = nanonet.nanonetcall:main'
+            'nanonetcall = nanonet.nanonetcall:main',
+            'nanonettrain = nanonet.nanonettrain:main'
         ]
     }
 )

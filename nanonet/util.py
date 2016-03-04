@@ -22,6 +22,10 @@ def random_string(length=6):
     return ''.join(random.choice(string.ascii_uppercase) for _ in range(length))
 
 
+def conf_line(option, value, pad=30):
+    return '{} = {}\n'.format(option.ljust(pad), value)
+
+
 def window(iterable, size):
     """Create an iterator returning a sliding window from another iterator.
 
@@ -34,6 +38,14 @@ def window(iterable, size):
         for each in iters[i:]:
             next(each, None)
     return izip(*iters)
+
+
+def docstring_parameter(*sub):
+    """Allow docstrings to contain parameters."""
+    def dec(obj):
+        obj.__doc__ = obj.__doc__.format(*sub)
+        return obj
+    return dec
 
 
 class FastaWrite(object):

@@ -21,38 +21,11 @@ modifications to that which is available on
 https://sourceforge.net/projects/currennt/. The changes serve to allow
 currennt to run with current versions of Nvidia graphics cards and libraries.
 
-Compilation of currennt requires a few dependencies to be fulfilled. We must
-first install the NVIDIA CUDA libaries. Note that the NVIDIA website has two
-versions of this package, a local and a network install. Here we use the
-network package.
+The modified distribution of currennt may be found at:
+https://github.com/nanoporetech/currennt
 
-    # Install NVIDIA's meta package
-    wget http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1410/x86_64/cuda-repo-ubuntu1410_7.0-28_amd64.deb
-    sudo dpkg -i cuda-repo-ubuntu1410_7.0-28_amd64.deb
-
-    sudo apt-get update
-    sudo apt-get install -y cuda
-
-At this point if you wish to use a GPU with currennt you will need to restart
-your machine. Upon restart issuing the command:
-
-    nvidia-smi
-
-should show information about your GPU.
-
-Building currennt has some further, more standard, requirements:
-
-    sudo apt-get install libboost-all-dev libnetcdf-dev netcdf-bin cmake
-
-after which we can build currennt:
-
-    cd currennt
-    mkdir build && cd build
-    cmake ..
-    make
-    sudo cp currennt /usr/local/bin
-
-A successful build will result in a single executable file named `currennt`.
+Installation notes may be found at
+https://github.com/nanoporetech/currennt/blob/master/Makefile
 
 **Installation of nanonet**
 
@@ -108,7 +81,9 @@ Currennt can then be built as for Ubuntu:
 The python components can be installed using the setup script:
 
     cd nanonet
-    python setup.py install
+    python setup.py develop --user
+    
+to perform an inplace install.
 
 
 Installation on Windows
@@ -262,6 +237,34 @@ instructs nanonetcall to process at most `<n>` reads in a single batch.
 Using batch has the added benefit that final basecalls will be produced in a
 more streamed fashion, useful if you wish to pipe them to e.g. an alignment
 program.
+
+Training a network
+------------------
+
+The package provides also an interface to currennt for training networks from
+.fast5 files. The type of neural networks implemented by currennt require
+labelled input data. **Nanonet does not provide a method for labelling data**.
+It does however provide a hook to create labelled data.
+
+To run the trainer we specify training data, and validation data. The former
+will be used to train the network whilst the latter is used to check that the
+network does not become overtrained to the test data.
+
+    nanonettrain --train <training_data> --val <validation_data> \
+        --output <output_model_prefix> --model <input_model_spec>
+
+An example input model can be found in `nanonet/data/default_model.tmpl`.
+Currently the only supported models are those based on three-mers. (Though most
+of the code supported generic kmers, the C code for Viterbi decoding does not).
+The only other consideration is that the size of the first ("input") layer of
+the network must correspond to the featur vectors created by
+`nanonet.features.events_to_features`. The nanonettrain program will try to
+enforce these considerations. In contructing models one should assign the
+input layer a size of `<n_features>` and the final two layers as `<n_states>`,
+as in the example.
+
+Training is an intensive process, even on a GPU expect it to take hours not
+minutes. It is not recommended to attempt training models without GPU support.
 
 
 Trouble Shooting

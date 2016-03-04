@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import argparse
+import json
 import os
 import re
 import math
@@ -10,9 +11,9 @@ import timeit
 import subprocess
 import pkg_resources
 
-from nanonet import __currennt_exe__
+from nanonet import run_currennt
 from nanonet.fast5 import Fast5, iterate_fast5
-from nanonet.util import random_string, FastaWrite, tang_imap
+from nanonet.util import random_string, conf_line, FastaWrite, tang_imap
 from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
 from nanonet.parse_currennt import CurrenntParserCaller
 from nanonet.features import make_currennt_basecall_input_multi
@@ -29,6 +30,8 @@ def get_parser():
     
     parser.add_argument("input", action=FileExist,
         help="A path to fast5 files or a single netcdf file.")
+    parser.add_argument("--section", default=None, choices=('template', 'complement'),
+        help="Section of read for which to produce basecalls, will override that stored in model file.")
 
     parser.add_argument("--output", type=str,
         help="Output name, output will be in fasta format.")
@@ -88,14 +91,12 @@ def process_reads(workspace, modelfile, cache_path, device, cuda, nseqs, inputfi
     batch, fast5s, netcdf = inputfile
     reads_written = make_currennt_basecall_input_multi(fast5s, netcdf_file=netcdf, **kwargs)
     if reads_written == 0:
+        sys.stderr.write('All reads filtered out in batch {}.\n'.format(batch))
         return batch, None
 
     # Currennt config file
     currennt_cfg = os.path.join(workspace, 'currennt_{}.cfg'.format(batch))
     currennt_out = os.path.join(workspace, 'currennt_{}.out'.format(batch))
-
-    def conf_line(option, value, pad=22):
-        return '{} = {}\n'.format(option.ljust(pad), value)
 
     with open(currennt_cfg, 'w') as cfg:    
         cfg.write(conf_line('network', modelfile))
@@ -109,29 +110,8 @@ def process_reads(workspace, modelfile, cache_path, device, cuda, nseqs, inputfi
             cfg.write(conf_line('cuda', 'false'))   
  
     # Run Currennt
-    os.environ["CURRENNT_CUDA_DEVICE"]="{}".format(device)
-    cmd = [__currennt_exe__, currennt_cfg]
-    with open(os.devnull, 'wb') as devnull:
-        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=devnull)
-        stdout, _ = p.communicate()
-        p.wait()
-        if p.returncode != 0:
-            # On windows currennt fails to remove the cache file. Check for
-            #   this and move on, else raise an error.
-            e = subprocess.CalledProcessError(2, ' '.join(cmd))
-            if os.name != 'nt':
-                raise e
-            else:
-                cache_file = re.match(
-                    '(FAILED: boost::filesystem::remove.*: )"(.*)"',
-                    stdout.splitlines()[-1])
-                if cache_file is not None:
-                    cache_file = cache_file.group(2)
-                    sys.stderr.write('currennt failed to clear its cache, cleaning up {}\n'.format(cache_file))
-                    os.unlink(cache_file)
-                else:
-                    raise e
-
+    run_currennt(currennt_cfg, device)
+    sys.stderr.write('Finished neural network processing for batch {}.\n'.format(batch))
     return batch, currennt_out
 
 
@@ -141,6 +121,12 @@ def main():
     args = get_parser().parse_args()
 
     modelfile  = os.path.abspath(args.model)
+    if args.section is None:
+        try:
+            args.section = json.load(open(modelfile))['meta']['section']
+        except:
+            print "No 'section' found in modelfile, try specifying --section."
+            sys.exit(1)
 
     if args.cuda:
         args.network_jobs = 1
@@ -167,9 +153,9 @@ def main():
         inputfile = inputfile_tmpl.format(i)
         inputs.append((i, group, os.path.abspath(inputfile)))         
 
-    sys.stderr.write("Running basecalling. Network is running on {} {}(s) with"
+    sys.stderr.write("Running basecalling for {} sections. Network is running on {} {}(s) with"
         " decoding running on {} CPU(s). Batch size is {}.\n".format(
-        args.network_jobs, 'GPU' if args.cuda else 'CPU',
+        args.section, args.network_jobs, 'GPU' if args.cuda else 'CPU',
         args.decoding_jobs, batch_size)
     )
 
@@ -181,7 +167,8 @@ def main():
     fix_kwargs = {
         'window':args.window,
         'min_len':args.min_len,
-        'max_len':args.max_len
+        'max_len':args.max_len,
+        'section':args.section
     }
 
     pstay  = args.trans[0]
@@ -195,9 +182,7 @@ def main():
     with FastaWrite(args.output) as fasta:
         for batch, currennt_out in tang_imap(process_reads, inputs, fix_args=fix_args, fix_kwargs=fix_kwargs, threads=args.network_jobs):
             if currennt_out == None:
-                sys.stderr.write('All reads filtered out in batch {}.\n'.format(batch))
                 continue
-            sys.stderr.write('Finished neural network processing for batch {}.\n'.format(batch))
             # Viterbi calls
             cpc = CurrenntParserCaller(
                 fin=currennt_out, trans_free=args.trans_free,
