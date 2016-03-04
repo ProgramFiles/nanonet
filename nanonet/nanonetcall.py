@@ -111,6 +111,7 @@ def process_reads(workspace, modelfile, cache_path, device, cuda, nseqs, inputfi
  
     # Run Currennt
     run_currennt(currennt_cfg, device)
+    os.unlink(netcdf)
     sys.stderr.write('Finished neural network processing for batch {}.\n'.format(batch))
     return batch, currennt_out
 
@@ -133,9 +134,12 @@ def main():
     else:
         args.nseqs = 1
 
-    # User-defined workspace or use system tmp
+    # User-defined workspace or use system tmp, if using tmp
+    #   clean up as we go since the workspace can get large
+    clean_workspace = False
     workspace = args.workspace
     if workspace is None:
+        clean_workspace = True
         workspace = os.path.join(tempfile.gettempdir(), random_string())
     if not os.path.exists(workspace):
         os.makedirs(workspace)
@@ -162,7 +166,7 @@ def main():
     fix_args = [
         workspace, modelfile, args.cache_path,
         args.device, args.cuda,
-        args.nseqs
+        args.nseqs,
     ]
     fix_kwargs = {
         'window':args.window,
@@ -192,13 +196,12 @@ def main():
                 fasta.write(*result)
                 n_reads += 1
                 n_bases += len(result[1])
+            if clean_workspace:
+                os.unlink(currennt_out)
+                
             sys.stderr.write('Finished basecalling batch {}.\n'.format(batch))
     t1 = timeit.default_timer()
     sys.stderr.write('Processed {} reads ({} bases) in {}s\n'.format(n_reads, n_bases, t1 - t0))
-
-    # Clean up, should use a context manager...
-    if args.workspace is None:
-        shutil.rmtree(workspace)
 
 
 if __name__ == "__main__":

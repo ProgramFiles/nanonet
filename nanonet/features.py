@@ -114,7 +114,10 @@ def make_currennt_basecall_input_multi(fast5_files, netcdf_file, section='templa
             filename = os.path.basename(f)
             with Fast5(f) as fh:
                 events, _ = split_hairpin(fh.get_read(), section=section)
-            X = events_to_features(events, window=window)
+            try:
+                X = events_to_features(events, window=window)
+            except TypeError:
+                continue
             try:
                 X = X[trim:-trim]
             except:
