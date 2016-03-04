@@ -9,3 +9,5 @@
 build
 dist
 deb_dist
+tmp/
+*.gz
