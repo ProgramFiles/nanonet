@@ -8,13 +8,12 @@ import pkg_resources
 import tempfile
 import subprocess
 
-from nanonet import __currennt_exe__
+from nanonet import run_currennt_noisy
 from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
 from nanonet.fast5 import iterate_fast5
 from nanonet.features import make_currennt_training_input_multi
 from nanonet.util import random_string, conf_line
 
-from nanonet import fast5
 
 def get_parser():
     parser = argparse.ArgumentParser(
@@ -33,7 +32,7 @@ def get_parser():
         help="Input validation data, either a path to fast5 files or a single netcdf file", required=True)
     parser.add_argument("--val_list", action=FileExist, default=None,
         help="Strand list constaining validation set")
-    parser.add_argument("--workspace_path", default=tempfile.gettempdir(),
+    parser.add_argument("--workspace", default=tempfile.gettempdir(),
         help="Path for storing training and validation NetCDF files, if not specified a temporary file is used.")
     
     parser.add_argument("--output", help="Output prefix", required=True)
@@ -76,14 +75,21 @@ def main():
 
     if not args.cuda:
         args.nseqs = 1
-    
+   
+    if not os.path.exists(args.workspace):
+        os.makedirs(args.workspace)
+ 
     # file names for training
+    tag = random_string()
     trainfile  = os.path.abspath(args.train)
     valfile    = os.path.abspath(args.val)
     modelfile  = os.path.abspath(args.model)
     outputfile = os.path.abspath(args.output)
     temp_name = os.path.abspath(os.path.join(
-        args.workspace_path, 'nn_data_{}_'.format(random_string())
+        args.workspace, 'nn_data_{}_'.format(tag)
+    ))
+    config_name = os.path.abspath(os.path.join(
+        args.workspace, 'nn_{}.cfg'.format(tag)
     ))
     
     # make training nc file
@@ -142,47 +148,44 @@ def main():
         mod_meta = None
 
     modelfile = os.path.abspath(os.path.join(
-        args.workspace_path, 'input_model.jsn'
+        args.workspace, 'input_model.jsn'
     ))
     with open(modelfile, 'w') as model:
         model.write(mod)
 
     # currennt cfg files
-    currennt_cfg = tempfile.NamedTemporaryFile(delete=True) #TODO: this will fail on windows
-    final_network = "{}_final.jsn".format(outputfile)
-    if not args.cuda:
-        currennt_cfg.write(conf_line('cuda', 'false'))
-    # IO
-    currennt_cfg.write(conf_line("cache_path", args.cache_path))
-    currennt_cfg.write(conf_line("network", modelfile))
-    currennt_cfg.write(conf_line("train_file", trainfile))
-    currennt_cfg.write(conf_line("val_file", valfile))
-    currennt_cfg.write(conf_line("save_network", final_network))
-    currennt_cfg.write(conf_line("autosave_prefix", "{}_auto".format(outputfile)))
-    # Tunable parameters
-    currennt_cfg.write(conf_line("max_epochs", args.max_epochs))
-    currennt_cfg.write(conf_line("max_epochs_no_best", args.max_epochs_no_best))
-    currennt_cfg.write(conf_line("validate_every", args.validate_every))
-    currennt_cfg.write(conf_line("parallel_sequences", args.parallel_sequences))
-    currennt_cfg.write(conf_line("learning_rate", args.learning_rate))
-    currennt_cfg.write(conf_line("momentum", args.momentum))
-    # Fixed parameters
-    currennt_cfg.write(conf_line("train", "true"))
-    currennt_cfg.write(conf_line("weights_dist", "normal"))
-    currennt_cfg.write(conf_line("weights_normal_sigma", "0.1"))
-    currennt_cfg.write(conf_line("weights_normal_mean", "0"))
-    currennt_cfg.write(conf_line("stochastic", "true"))
-    currennt_cfg.write(conf_line("input_noise_sigma", "0.0"))
-    currennt_cfg.write(conf_line("shuffle_fractions", "false"))
-    currennt_cfg.write(conf_line("shuffle_sequences", "true"))
-    currennt_cfg.write(conf_line("autosave_best", "true"))
-    currennt_cfg.flush()
+    with open(config_name, 'w') as currennt_cfg:
+        final_network = "{}_final.jsn".format(outputfile)
+        if not args.cuda:
+            currennt_cfg.write(conf_line('cuda', 'false'))
+        # IO
+        currennt_cfg.write(conf_line("cache_path", args.cache_path))
+        currennt_cfg.write(conf_line("network", modelfile))
+        currennt_cfg.write(conf_line("train_file", trainfile))
+        currennt_cfg.write(conf_line("val_file", valfile))
+        currennt_cfg.write(conf_line("save_network", final_network))
+        currennt_cfg.write(conf_line("autosave_prefix", "{}_auto".format(outputfile)))
+        # Tunable parameters
+        currennt_cfg.write(conf_line("max_epochs", args.max_epochs))
+        currennt_cfg.write(conf_line("max_epochs_no_best", args.max_epochs_no_best))
+        currennt_cfg.write(conf_line("validate_every", args.validate_every))
+        currennt_cfg.write(conf_line("parallel_sequences", args.parallel_sequences))
+        currennt_cfg.write(conf_line("learning_rate", args.learning_rate))
+        currennt_cfg.write(conf_line("momentum", args.momentum))
+        # Fixed parameters
+        currennt_cfg.write(conf_line("train", "true"))
+        currennt_cfg.write(conf_line("weights_dist", "normal"))
+        currennt_cfg.write(conf_line("weights_normal_sigma", "0.1"))
+        currennt_cfg.write(conf_line("weights_normal_mean", "0"))
+        currennt_cfg.write(conf_line("stochastic", "true"))
+        currennt_cfg.write(conf_line("input_noise_sigma", "0.0"))
+        currennt_cfg.write(conf_line("shuffle_fractions", "false"))
+        currennt_cfg.write(conf_line("shuffle_sequences", "true"))
+        currennt_cfg.write(conf_line("autosave_best", "true"))
     
     # run currennt
-    cmd = [__currennt_exe__, currennt_cfg.name]
-    os.environ["CURRENNT_CUDA_DEVICE"]="{}".format(args.device)
-    print "\n\nRunning: {}".format(' '.join(cmd))
-    subprocess.check_call(cmd)
+    print "\n\nRunning currennt with: {}".format(config_name)
+    run_currennt_noisy(config_name, device=args.device)
 
     # Currennt won't pass through our meta in the model, amend the output
     if mod_meta is not None:

@@ -43,3 +43,8 @@ def run_currennt(currennt_cfg, device=0):
                 else:
                     sys.stderr.write(stdout)
                     raise e
+
+def run_currennt_noisy(currennt_cfg, device=0):
+    os.environ["CURRENNT_CUDA_DEVICE"]="{}".format(device)
+    cmd = [__currennt_exe__, currennt_cfg]
+    subprocess.check_call(cmd)
