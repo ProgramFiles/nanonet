@@ -19,6 +19,7 @@ except OSError:
 
 
 def run_currennt(currennt_cfg, device=0):
+    sys.stdout.flush()
     os.environ["CURRENNT_CUDA_DEVICE"]="{}".format(device)
     cmd = [__currennt_exe__, currennt_cfg]
     with open(os.devnull, 'wb') as devnull:
@@ -45,6 +46,7 @@ def run_currennt(currennt_cfg, device=0):
                     raise e
 
 def run_currennt_noisy(currennt_cfg, device=0):
+    sys.stdout.flush()
     os.environ["CURRENNT_CUDA_DEVICE"]="{}".format(device)
     cmd = [__currennt_exe__, currennt_cfg]
     subprocess.check_call(cmd)

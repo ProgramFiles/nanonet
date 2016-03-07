@@ -1,4 +1,5 @@
 {
+    "meta": {"section": "template"},
     "layers": [
         {
             "name": "input",
