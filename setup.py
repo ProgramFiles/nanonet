@@ -23,7 +23,16 @@ class EnsureClibs(Command):
                 raise IOError('Library {} not found, see README.md for details of precompiling libraries.'.format(name))
         # Remove extensions so we don't try to compile
         self.__dict__['distribution'].__dict__['ext_modules'] = []
-        
+
+# Get the version number from __init__.py
+verstrline = open(os.path.join('nanonet', '__init__.py'), 'r').read()
+vsre = r"^__version__ = ['\"]([^'\"]*)['\"]"
+mo = re.search(vsre, verstrline, re.M)
+if mo:
+    version = mo.group(1)
+else:
+    raise RuntimeError('Unable to find version string in "dragonet/__init__.py".')
+    
 
 c_compile_args = [
     '-Wall', '-DNDEBUG', '-std=c99',
@@ -49,7 +58,7 @@ requires=[
 
 setup(
     name='nanonet',
-    version=0.1,
+    version=version,
     description='A simple recurrent neural network based basecaller nanopore data.',
     maintainer='Chris Wright',
     maintainer_email='chris.wright@nanoporetech.com',
