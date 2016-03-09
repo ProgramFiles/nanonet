@@ -6,6 +6,13 @@ from glob import glob
 from setuptools import setup, find_packages, Extension, Command
 import pkg_resources
 
+print """
+*********************************************************************************
+Proprietary and confidential information of Oxford Nanopore Technologies, Limited
+All rights reserved; (c)2016: Oxford Nanopore Technologies, Limited
+*********************************************************************************
+"""
+
 
 class EnsureClibs(Command):
     description = 'Ensures C libraries are precompiled and in data folder.'
