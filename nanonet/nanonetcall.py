@@ -47,7 +47,7 @@ def get_parser():
         help="Max. read length (events) to basecall.")
     
     parser.add_argument("--model", type=str, action=FileExist,
-        default=pkg_resources.resource_filename('nanonet', 'data/default_model.jsn'),
+        default=pkg_resources.resource_filename('nanonet', 'data/template_model.jsn'),
         help="Trained ANN.")
     parser.add_argument("--device", type=int, default=0,
         help="ID of CUDA device to use." )
