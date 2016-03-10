@@ -1,5 +1,8 @@
-Proprietary and confidential information of Oxford Nanopore Technologies, Limited 
-All rights reserved; (c)2016: Oxford Nanopore Technologies, Limited
+*********************************************************************************
+**Proprietary and confidential information of Oxford Nanopore Technologies, Limited**
+
+**All rights reserved; (c)2016: Oxford Nanopore Technologies, Limited**
+*********************************************************************************
 
 
 Nanonet
