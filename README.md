@@ -1,8 +1,8 @@
-*********************************************************************************
+*************************************************************************************
 **Proprietary and confidential information of Oxford Nanopore Technologies, Limited**
 
 **All rights reserved; (c)2016: Oxford Nanopore Technologies, Limited**
-*********************************************************************************
+*************************************************************************************
 
 
 Nanonet
@@ -12,9 +12,9 @@ Nanonet provides recurrent neural network basecalling via currennt. Event data
 is extracted from .fast5 files to create feature vectors to input into a
 pretrained network. Output is as a single .fasta file.
 
-Nanonet leverages currennt to run recurrennt neural networks. Currennt is
+Nanonet leverages currennt to run recurrent neural networks. Currennt is
 generally run with GPUs to aid performance but can be run in a CPU only
-environment. 
+environment.
 
 Installation on Ubuntu
 ----------------------
@@ -136,7 +136,7 @@ from which you wish to run currennt:
     currennt/Release/cudart64_75.dll
     currennt.exe
 
-To the same location you should copy all .dll files located under the curennt
+To the same location you should copy all .dll files located under the currennt
 folder. In order for nanonet to execute currennt you should add this location
 to the environment variable `CURRENNT`. In Windows Powershell this can be done
 via:
@@ -315,3 +315,5 @@ whilst on Ubuntu it is:
 If `nanonet` complains that it cannot locate the `currennt` executable you will
 need to set the `CURRENNT` environment variable to the location of the
 executable.
+
+
