@@ -211,7 +211,7 @@ your path. It requires a single argument:
     nanonetcall {input_folder} > {output.fasta}
 
 To test your installation several .fast5 files are provided in the
-`example_data` folder of the source distribution.
+`sample_data` folder of the source distribution.
 
 **Using a GPU**
 
