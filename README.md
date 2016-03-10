@@ -214,7 +214,31 @@ your path. It requires a single argument:
     nanonetcall {input_folder} > {output.fasta}
 
 To test your installation several .fast5 files are provided in the
-`sample_data` folder of the source distribution.
+`sample_data` folder of the source distribution, as a concrete example the
+command:
+
+    nanonetcall --network_jobs 5 --decoding_jobs 1 --batch 1 sample_data > basecalls.fa
+
+will produced output along the following lines:
+
+    Creating currennt input NetCDF(s): /tmp/DBRMWZ/basecall_features_{}.netcdf
+    Running basecalling for template sections. Network is running on 5 CPU(s) with decoding running on 1 CPU(s). Batch size is 1.
+    Finished neural network processing for batch 0.
+    Finished basecalling batch 0.
+    Finished neural network processing for batch 1.
+    Finished basecalling batch 1.
+    Finished neural network processing for batch 4.
+    Finished neural network processing for batch 3.
+    Finished neural network processing for batch 2.
+    Finished basecalling batch 2.
+    Finished basecalling batch 3.
+    Finished basecalling batch 4.
+    Processed 5 reads (25464 bases) in 12.3650121689s
+
+The order of the output may differ including the ordering or records in the
+output basecalls.fa, though the content of the fasta records should be
+deterministic and identical to that provided.
+
 
 **Using a GPU**
 
