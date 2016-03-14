@@ -26,7 +26,6 @@ extensions = []
 requires=[
     'h5py',
     'numpy',
-    'netCDF4'
 ]
 extra_requires = {
     'currennt': ['netCDF4']
