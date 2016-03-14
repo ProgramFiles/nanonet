@@ -16,8 +16,25 @@ Nanonet leverages currennt to run recurrent neural networks. Currennt is
 generally run with GPUs to aid performance but can be run in a CPU only
 environment.
 
-Installation on Ubuntu
-----------------------
+Binary Installation on Ubuntu
+-----------------------------
+
+wget http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1404/x86_64/cuda-repo-ubuntu1404_7.5-18_amd64.deb
+sudo dpkg -i cuda-repo-ubuntu1404_7.5-18_amd64.deb
+sudo apt-get update
+sudo apt-get -y install cuda-cudart-7-5 cuda-cublas-7-5 netcdf-bin libboost-all-dev
+
+wget https://github.com/nanoporetech/currennt/releases/download/v0.2-rc1-2/python-netcdf4_1.2.3-1_amd64.deb \
+  https://github.com/nanoporetech/currennt/releases/download/v0.2-rc1-2/ont-currennt-0.2.1-3-trusty.deb \
+  https://github.com/nanoporetech/nanonet/releases/download/v1.0.0/python-nanonet_1.0.0-1_amd64.deb
+
+sudo dpkg -i python-netcdf4_1.2.3-1_amd64.deb ont-currennt_0.2.1-2-trusty_amd64.deb python-nanonet_1.0.0-1_amd64.deb
+# expect an error here about missing prerequisite packages, which can be corrected with:
+apt-get -f install
+
+
+Source Installation on Ubuntu
+-----------------------------
 
 The following was tested to work on a clean Ubuntu 14.04 Vagrant virtual machine.
 
@@ -50,8 +67,8 @@ mechanisms:
     python setup.py install
 
 
-Installation on OSX
--------------------
+Source Installation on OSX
+--------------------------
 
 Installation on Mac OSX mirrors that on Ubuntu. The following was performed on
 a Mac OSX 10.11.3 development machine. Additional dependencies may be required
@@ -93,8 +110,8 @@ The python components can be installed using the setup script:
 to perform an inplace install.
 
 
-Installation on Windows
------------------------
+Source Installation on Windows
+------------------------------
 The following build of currennt was performed on Windows 10.
 
 **Boost**
