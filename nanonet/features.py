@@ -4,7 +4,6 @@ import string
 from itertools import izip
 import numpy as np 
 import numpy.lib.recfunctions as nprf
-from netCDF4 import Dataset
 
 from nanonet.fast5 import Fast5
 from nanonet.segment import split_hairpin
@@ -87,6 +86,7 @@ def make_currennt_basecall_input_multi(fast5_files, netcdf_file, section='templa
     :param min_len: minimum length of read to consider
     :param max_len: maximum length of read to consider
     """
+    from netCDF4 import Dataset
 
     # We need to know ahead of time how wide our feature vector is,
     #    lets generate one and take a peek.
@@ -139,6 +139,30 @@ def make_currennt_basecall_input_multi(fast5_files, netcdf_file, section='templa
             inputs[curr_numTimesteps:] = X
 
     return reads_written
+
+
+def make_basecall_input_multi(fast5_files, section='template', window=[-1, 0, 1], trim=10, min_len=1000, max_len=9000):
+    """Like the above, but doesn't yields directly events. The point here is to
+    be fully consistent with the currennt interface but allow use of the python
+    library
+    """
+    for f in fast5_files:
+        filename = os.path.basename(f)
+        with Fast5(f) as fh:
+            events, _ = split_hairpin(fh.get_read(), section=section)
+            name = fh.filename_short
+        try:
+            X = events_to_features(events, window=window)
+        except TypeError:
+            continue
+        try:
+            X = X[trim:-trim]
+        except:
+            continue
+        else:
+            if len(X) < min_len or len(X) > max_len:
+                continue
+        yield name, X
 
 
 def chunker(array, chunk_size):
@@ -203,6 +227,7 @@ def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
     :param get_labels: callback to return event kmer labels, will be passed .fast5 filename
     :param callback_kwargs: kwargs for both `get_events` and `get_labels`
     """
+    from netCDF4 import Dataset
 
     # We need to know ahead of time how wide our feature vector is,
     #    lets generate one and take a peek.

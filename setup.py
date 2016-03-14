@@ -61,6 +61,9 @@ requires=[
     'numpy',
     'netCDF4'
 ]
+extra_requires = {
+    'currennt': ['netCDF4']
+}
 
 
 setup(

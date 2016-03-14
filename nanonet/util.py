@@ -1,4 +1,5 @@
 import sys
+import os
 from itertools import tee, imap, izip, izip_longest, product
 from functools import partial
 from multiprocessing import Pool
@@ -8,9 +9,9 @@ import math
 
 __eta__ = 1e-100
 
-# N.B. this defines the order of our states, it is not lexographical!
-def all_nmers(n=3):
-    return [''.join(x) for x in product('ATGC', repeat=3)]
+# N.B. this defines the order of our states, it is not lexographical by default!
+def all_nmers(n=3, alpha='ATGC'):
+    return [''.join(x) for x in product(alpha, repeat=3)]
 
 
 def random_string(length=6):
@@ -61,9 +62,9 @@ class FastaWrite(object):
 
     def __enter__(self):
         if self.filename is not None and self.filename != '-':
-            self.fh = open(self.filename, 'w')
+            self.fh = open(self.filename, 'w', 0)
         else:
-            self.fh = sys.stdout
+            self.fh = os.fdopen(sys.stdout.fileno(), 'w', 0)
         return self
 
     def __exit__(self, exception_type, exception_value, traceback):
