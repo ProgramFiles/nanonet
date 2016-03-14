@@ -69,44 +69,43 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, **kwargs):
     kmer_len = 3 #TODO: parameterise this
 
     t0 = timeit.default_timer()
-    results = list(make_basecall_input_multi((fast5,), **kwargs))
+    name, features = make_basecall_input_multi((fast5,), **kwargs).next()
     t1 = timeit.default_timer()
     feature_time = t1 - t0
 
-    for name, features in results:
-        t0 = timeit.default_timer()
-        network = np.load(modelfile).item()
-        t1 = timeit.default_timer()
-        post = network.run(features.astype(nn.tang_nn_type))
-        t2 = timeit.default_timer()
+    t0 = timeit.default_timer()
+    network = np.load(modelfile).item()
+    t1 = timeit.default_timer()
+    post = network.run(features.astype(nn.tang_nn_type))
+    t2 = timeit.default_timer()
 
-        # Reorder ATGC -> ACGT, models are trained with funny order
-        kmers_nn = all_nmers(kmer_len)
-        kmers_nn_revmap = {k:i for i, k in enumerate(kmers_nn)}
-        kmers_hmm = sorted(kmers_nn)
-        nkmers = len(kmers_nn)
-        kmer_out_order = np.arange(nkmers)
-        kmer_order = np.fromiter(
-            (kmers_nn_revmap[k] for k in kmers_hmm),
-            dtype=int, count=len(kmers_hmm)
-        )
+    # Reorder ATGC -> ACGT, models are trained with funny order
+    kmers_nn = all_nmers(kmer_len)
+    kmers_nn_revmap = {k:i for i, k in enumerate(kmers_nn)}
+    kmers_hmm = sorted(kmers_nn)
+    nkmers = len(kmers_nn)
+    kmer_out_order = np.arange(nkmers)
+    kmer_order = np.fromiter(
+        (kmers_nn_revmap[k] for k in kmers_hmm),
+        dtype=int, count=len(kmers_hmm)
+    )
 
-        # Strip out events where XXX most likely, and XXX states entirely 
-        max_call = np.argmax(post, axis=1)
-        post = post[max_call < nkmers]
-        post = post[:, :-1]
-        post[:, kmer_out_order] = post[:, kmer_order]
-        post /= np.sum(post, axis=1).reshape((-1, 1))
+    # Strip out events where XXX most likely, and XXX states entirely 
+    max_call = np.argmax(post, axis=1)
+    post = post[max_call < nkmers]
+    post = post[:, :-1]
+    post[:, kmer_out_order] = post[:, kmer_order]
+    post /= np.sum(post, axis=1).reshape((-1, 1))
 
-        post = min_prob + (1.0 - min_prob) * post
-        trans = decoding.estimate_transitions(post, trans=trans)
-        score, states = decoding.decode_profile(post, trans=trans, log=False)
+    post = min_prob + (1.0 - min_prob) * post
+    trans = decoding.estimate_transitions(post, trans=trans)
+    score, states = decoding.decode_profile(post, trans=trans, log=False)
 
-        kmer_path = [kmers_hmm[i] for i in states]
-        seq = kmers_to_sequence(kmer_path)
-        t3 = timeit.default_timer()
+    kmer_path = [kmers_hmm[i] for i in states]
+    seq = kmers_to_sequence(kmer_path)
+    t3 = timeit.default_timer()
 
-        yield name, seq, score, len(post), (feature_time, t1 - t0, t2 - t1, t3 - t2)
+    return name, seq, score, len(post), (feature_time, t1 - t0, t2 - t1, t3 - t2)
 
 
 def main():
@@ -138,15 +137,15 @@ def main():
     timings = [0, 0, 0, 0]
     fast5_files = list(iterate_fast5(args.input, paths=True, strand_list=args.strand_list, limit=args.limit))
     with FastaWrite(args.output) as fasta:
-        for results in tang_imap(process_read, fast5_files, fix_args=fix_args, fix_kwargs=fix_kwargs):
-            for name, basecall, _, _, time in results:
-                fasta.write(*(name, basecall))
-                n_reads += 1
-                n_bases += len(basecall)
-                timings = [x + y for x, y in zip(timings, time)]              
+        for results in tang_imap(process_read, fast5_files, fix_args=fix_args, fix_kwargs=fix_kwargs, threads=args.decoding_jobs):
+            name, basecall, _, _, time = results
+            fasta.write(*(name, basecall))
+            n_reads += 1
+            n_bases += len(basecall)
+            timings = [x + y for x, y in zip(timings, time)]              
     t1 = timeit.default_timer()
-    sys.stderr.write('Processed {} reads ({} bases) in {}s\n'.format(n_reads, n_bases, t1 - t0))
-    sys.stderr.write('Feature generation: {}\nLoad network: {}\nRun network: {}\nDecoding: {}\n'.format(*timings))
+    sys.stderr.write('Processed {} reads ({} bases) in {}s (wall time)\n'.format(n_reads, n_bases, t1 - t0))
+    sys.stderr.write('Profiling\nFeature generation: {}\nLoad network: {}\nRun network: {}\nDecoding: {}\n'.format(*timings))
 
 
 if __name__ == "__main__":
