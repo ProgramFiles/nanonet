@@ -201,12 +201,13 @@ class parallel:
 class serial:
     """ Run multiple layers serially: output of a layer is the input for the next layer
     """
-    def __init__(self, layers):
+    def __init__(self, layers, meta=None):
         prev_out_size = layers[0].out_size()
         for i in range(1, len(layers)):
             assert prev_out_size == layers[i].in_size(), "Incompatible shapes: {} -> {} in layers {}.\n".format(prev_out_size, layers[i].in_size(), i)
             prev_out_size = layers[i].out_size()
         self.layers = layers
+        self.meta = meta
 
     def in_size(self):
         return self.layers[0].in_size()

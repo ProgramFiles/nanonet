@@ -7,7 +7,6 @@ import numpy as np
 from nanonet import nn
 from nanonet.cmdargs import FileExist
 
-# This is here, not in main to allow documentation to be built
 parser = argparse.ArgumentParser(
     description='Convert currennt json network file into pickle',
     formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -113,5 +112,8 @@ if __name__ == '__main__':
         layers.append(parse_layer(layer['type'], layer['size'], wgts))
     layers = filter(lambda x: x is not None, layers)
 
-    network = nn.serial(layers)
+    meta = None
+    if 'meta' in in_network:
+        meta = in_network['meta']
+    network = nn.serial(layers, meta=meta)
     np.save(args.output, network)

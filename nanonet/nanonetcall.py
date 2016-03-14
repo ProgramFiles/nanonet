@@ -17,7 +17,6 @@ from nanonet import decoding, nn
 from nanonet.fast5 import Fast5, iterate_fast5
 from nanonet.util import random_string, conf_line, FastaWrite, tang_imap, all_nmers, kmers_to_sequence
 from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
-from nanonet.parse_currennt import CurrenntParserCaller
 from nanonet.features import make_basecall_input_multi
 
 import warnings
@@ -47,7 +46,7 @@ def get_parser():
         help="Max. read length (events) to basecall.")
     
     parser.add_argument("--model", type=str, action=FileExist,
-        default=pkg_resources.resource_filename('nanonet', 'data/template_model.jsn'),
+        default=pkg_resources.resource_filename('nanonet', 'data/template_model.npy'),
         help="Trained ANN.")
     parser.add_argument("--decoding_jobs", default=1, type=int, action=CheckCPU,
         help="No of decoding jobs to run in parallel.")
@@ -118,7 +117,7 @@ def main():
     modelfile  = os.path.abspath(args.model)
     if args.section is None:
         try:
-            args.section = json.load(open(modelfile))['meta']['section']
+            args.section = np.load(modelfile).item().meta['section']
         except:
             print "No 'section' found in modelfile, try specifying --section."
             sys.exit(1)
