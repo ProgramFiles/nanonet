@@ -19,9 +19,9 @@ Ubuntu. These will perform a full install of all components including currennt.
 
     wget https://github.com/nanoporetech/currennt/releases/download/v0.2-rc1-2/python-netcdf4_1.2.3-1_amd64.deb \
         https://github.com/nanoporetech/currennt/releases/download/v0.2-rc1-2/ont-currennt-0.2.1-3-trusty.deb \
-        https://github.com/nanoporetech/nanonet/releases/download/v1.0.0/python-nanonet_1.0.0-1_amd64.deb
+        https://github.com/nanoporetech/nanonet/releases/download/v1.1.1/python-nanonet_1.1.1-1_amd64.deb
 
-    sudo dpkg -i python-netcdf4_1.2.3-1_amd64.deb ont-currennt_0.2.1-2-trusty_amd64.deb python-nanonet_1.0.0-1_amd64.deb
+    sudo dpkg -i python-netcdf4_1.2.3-1_amd64.deb ont-currennt_0.2.1-2-trusty_amd64.deb python-nanonet_1.1.1-1_amd64.deb
     # expect an error here about missing prerequisite packages, which can be corrected with:
     sudo apt-get -f install
 
