@@ -19,9 +19,9 @@ Ubuntu. These will perform a full install of all components including currennt.
 
     wget https://github.com/nanoporetech/currennt/releases/download/v0.2-rc1-2/python-netcdf4_1.2.3-1_amd64.deb \
         https://github.com/nanoporetech/currennt/releases/download/v0.2-rc1-2/ont-currennt-0.2.1-3-trusty.deb \
-        https://github.com/nanoporetech/nanonet/releases/download/v1.1.1/python-nanonet_1.1.1-1_amd64.deb
+        https://github.com/nanoporetech/nanonet/releases/download/v1.1.2/python-nanonet_1.1.3-1_amd64.deb
 
-    sudo dpkg -i python-netcdf4_1.2.3-1_amd64.deb ont-currennt_0.2.1-2-trusty_amd64.deb python-nanonet_1.1.1-1_amd64.deb
+    sudo dpkg -i python-netcdf4_1.2.3-1_amd64.deb ont-currennt_0.2.1-2-trusty_amd64.deb python-nanonet_1.1.3-1_amd64.deb
     # expect an error here about missing prerequisite packages, which can be corrected with:
     sudo apt-get -f install
 
@@ -183,31 +183,6 @@ For each of these run the following at a command prompt:
 
     pip install <package>
 
-__Compiling c_log_viterbi.c and setting-up nanonet__
+Following this one can install nanonet with:
 
-Nanonet contains small amounts of C code which must be compiled. The simplest
-way to have this compilation performed is to install the Microsoft Visual C++
-Compiler for Python 2.7. This can be found here:
-
-    https://www.microsoft.com/en-gb/download/details.aspx?id=44266
-
-Having installed this compiler nanonet one can simply run:
-
-    python setup.py install --user
-
-to install nanonet.
-
-If having two Visual Studio compilers on your system seems like overkill you
-can make use of the existing Visual Studio 2013 installed to compile currennt.
-To do this from a command prompt run:
-
-    cd nanonet/nanonet
-    "C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin\x86_amd64\vcvarsx86_amd64.bat"
-    "C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin\x86_amd64\cl.exe" /LD c_log_viterbi.c /link /out:data\clib_viterbi.dll
-
-Using this method you should run:
-
-    python setup.py noext install --user
-
-to instruct setuptools not to try compiling the C library itself. In this case
-the library will be loaded from the package data folder at runtime.
+    python setup.py install
