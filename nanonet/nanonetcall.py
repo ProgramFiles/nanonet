@@ -69,7 +69,10 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, **kwargs):
     kmer_len = 3 #TODO: parameterise this
 
     t0 = timeit.default_timer()
-    name, features = make_basecall_input_multi((fast5,), **kwargs).next()
+    try:
+        name, features = make_basecall_input_multi((fast5,), **kwargs).next()
+    except Exception as e:
+        return None 
     t1 = timeit.default_timer()
     feature_time = t1 - t0
 
@@ -105,7 +108,7 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, **kwargs):
     seq = kmers_to_sequence(kmer_path)
     t3 = timeit.default_timer()
 
-    return name, seq, score, len(post), (feature_time, t1 - t0, t2 - t1, t3 - t2)
+    return (name, seq, score, len(post), (feature_time, t1 - t0, t2 - t1, t3 - t2))
 
 
 def main():
@@ -118,7 +121,7 @@ def main():
         try:
             args.section = np.load(modelfile).item().meta['section']
         except:
-            print "No 'section' found in modelfile, try specifying --section."
+            sys.stderr.write("No 'section' found in modelfile, try specifying --section.\n")
             sys.exit(1)
 
     fix_args = [
@@ -134,18 +137,33 @@ def main():
     t0 = timeit.default_timer()
     n_reads = 0
     n_bases = 0
-    timings = [0, 0, 0, 0]
-    fast5_files = list(iterate_fast5(args.input, paths=True, strand_list=args.strand_list, limit=args.limit))
+    n_events = 0
+    timings = [0.0, 0.0, 0.0, 0.0]
+    fast5_files = iterate_fast5(args.input, paths=True, strand_list=args.strand_list, limit=args.limit)
     with FastaWrite(args.output) as fasta:
-        for results in tang_imap(process_read, fast5_files, fix_args=fix_args, fix_kwargs=fix_kwargs, threads=args.decoding_jobs):
-            name, basecall, _, _, time = results
+        for result in tang_imap(process_read, fast5_files, fix_args=fix_args, fix_kwargs=fix_kwargs, threads=args.decoding_jobs):
+            if result is None:
+                continue
+            name, basecall, _, n_ev, time = result
             fasta.write(*(name, basecall))
             n_reads += 1
             n_bases += len(basecall)
-            timings = [x + y for x, y in zip(timings, time)]              
+            n_events += n_ev
+            timings = [x + y for x, y in zip(timings, time)]
     t1 = timeit.default_timer()
-    sys.stderr.write('Processed {} reads ({} bases) in {}s (wall time)\n'.format(n_reads, n_bases, t1 - t0))
-    sys.stderr.write('Profiling\nFeature generation: {}\nLoad network: {}\nRun network: {}\nDecoding: {}\n'.format(*timings))
+    sys.stderr.write('Basecalled {} reads ({} bases, {} events) in {}s (wall time)\n'.format(n_reads, n_bases, n_events, t1 - t0))
+    feature, load, network, decoding = timings
+    sys.stderr.write(
+        'Profiling\n---------\n'
+        'Feature generation: {}\n'
+        'Load network: {}\n'
+        'Run network: {} ({} kb/s, {} kev/s)\n'
+        'Decoding: {} ({} kb/s, {} kev/s)\n'.format(
+            feature, load,
+            network, n_bases/1000/network, n_events/1000/network,
+            decoding, n_bases/1000/decoding, n_events/1000/decoding
+        )
+    )
 
 
 if __name__ == "__main__":
