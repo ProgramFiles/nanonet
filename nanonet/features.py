@@ -6,7 +6,7 @@ import numpy as np
 import numpy.lib.recfunctions as nprf
 
 from nanonet.fast5 import Fast5
-from nanonet.segment import split_hairpin
+from nanonet.segment import segment_wrapper
 from nanonet.util import all_nmers
 
 
@@ -113,7 +113,7 @@ def make_currennt_basecall_input_multi(fast5_files, netcdf_file, section='templa
         for f in fast5_files:
             filename = os.path.basename(f)
             with Fast5(f) as fh:
-                events, _ = split_hairpin(fh.get_read(), section=section)
+                events, _ = segment_wrapper(fh, section=section)
             try:
                 X = events_to_features(events, window=window)
             except TypeError:
@@ -149,7 +149,7 @@ def make_basecall_input_multi(fast5_files, section='template', window=[-1, 0, 1]
     for f in fast5_files:
         filename = os.path.basename(f)
         with Fast5(f) as fh:
-            events, _ = split_hairpin(fh.get_read(), section=section)
+            events, _ = segment_wrapper(fh, section=section)
             name = fh.filename_short
         try:
             X = events_to_features(events, window=window)
@@ -232,7 +232,7 @@ def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
     # We need to know ahead of time how wide our feature vector is,
     #    lets generate one and take a peek.
     with Fast5(fast5_files[0]) as fh:
-        ev, _ = split_hairpin(fh.get_read())
+        ev = fh.get_read()
     X = events_to_features(ev, window=window)
     inputPattSize = X.shape[1]
 

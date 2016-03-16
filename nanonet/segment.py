@@ -22,10 +22,22 @@ __config__ = {
 } 
 
 
+def segment_wrapper(fh, section='template', config=__config__):
+    """Try reading template-complement split point data from file
+    or fall back to attempting it ourselves.
+
+    """
+    try:
+        events = fh.get_section_events(section)
+    except:
+        return split_hairpin(fh.get_read(), section, config)
+    else:
+        return events, None
+
 
 def split_hairpin(data, section='template', config=__config__):
-    """Selects a hairpin splitting method based on the config file and calls the appropriate
-    splitting method.
+    """Splitting even data into template and complement sections, returns
+    requested section.
 
     :param data: Event data from a read fast5 file.
     :param config: A configuration parameters object
