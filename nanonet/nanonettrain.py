@@ -153,8 +153,8 @@ def main():
     ))
     with open(modelfile, 'w') as model:
         model.write(mod)
-   final_network = "{}_final.jsn".format(outputfile)
-   final_network_numpy = "{}_final.npy".format(outputfile)
+    final_network = "{}_final.jsn".format(outputfile)
+    final_network_numpy = "{}_final.npy".format(outputfile)
 
     # currennt cfg files
     with open(config_name, 'w') as currennt_cfg:
