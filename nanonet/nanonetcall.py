@@ -152,18 +152,19 @@ def main():
             timings = [x + y for x, y in zip(timings, time)]
     t1 = timeit.default_timer()
     sys.stderr.write('Basecalled {} reads ({} bases, {} events) in {}s (wall time)\n'.format(n_reads, n_bases, n_events, t1 - t0))
-    feature, load, network, decoding = timings
-    sys.stderr.write(
-        'Profiling\n---------\n'
-        'Feature generation: {}\n'
-        'Load network: {}\n'
-        'Run network: {} ({} kb/s, {} kev/s)\n'
-        'Decoding: {} ({} kb/s, {} kev/s)\n'.format(
-            feature, load,
-            network, n_bases/1000/network, n_events/1000/network,
-            decoding, n_bases/1000/decoding, n_events/1000/decoding
+    if n_reads > 0:
+        feature, load, network, decoding = timings
+        sys.stderr.write(
+            'Profiling\n---------\n'
+            'Feature generation: {}\n'
+            'Load network: {}\n'
+            'Run network: {} ({} kb/s, {} kev/s)\n'
+            'Decoding: {} ({} kb/s, {} kev/s)\n'.format(
+                feature, load,
+                network, n_bases/1000/network, n_events/1000/network,
+                decoding, n_bases/1000/decoding, n_events/1000/decoding
+            )
         )
-    )
 
 
 if __name__ == "__main__":
