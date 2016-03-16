@@ -89,8 +89,27 @@ def parse_layer(layer_type, size, weights):
         exit(1)
     return LAYER_DICT[layer_type](size, weights)
 
+
+def network_to_numpy(in_network):
+    """Transform a json representation of a network into a numpy
+    representation.
+    """
+
+    layers = list()
+    for layer in in_network['layers']:
+        wgts = in_network['weights'][layer['name']] if layer['name'] in in_network['weights'] else None
+        layers.append(parse_layer(layer['type'], layer['size'], wgts))
+    layers = filter(lambda x: x is not None, layers)
+
+    meta = None
+    if 'meta' in in_network:
+        meta = in_network['meta']
+    network = nn.serial(layers, meta=meta)
+    return network
+
+
 if __name__ == '__main__':
-    args = parser.parse_args()
+    args = parser.parse_args() 
 
     try:
         with open(args.input, 'r') as fh:
@@ -106,14 +125,5 @@ if __name__ == '__main__':
         sys.stderr.write('Could not find any weights in {} -- is network trained?\n'.format(args.network))
         exit(1)
 
-    layers = list()
-    for layer in in_network['layers']:
-        wgts = in_network['weights'][layer['name']] if layer['name'] in in_network['weights'] else None
-        layers.append(parse_layer(layer['type'], layer['size'], wgts))
-    layers = filter(lambda x: x is not None, layers)
-
-    meta = None
-    if 'meta' in in_network:
-        meta = in_network['meta']
-    network = nn.serial(layers, meta=meta)
+    network = network_to_numpy(in_network)
     np.save(args.output, network)

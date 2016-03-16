@@ -13,6 +13,7 @@ from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
 from nanonet.fast5 import iterate_fast5
 from nanonet.features import make_currennt_training_input_multi
 from nanonet.util import random_string, conf_line
+from nanonet.current_to_pickle import network_to_numpy
 
 
 def get_parser():
@@ -152,10 +153,11 @@ def main():
     ))
     with open(modelfile, 'w') as model:
         model.write(mod)
+   final_network = "{}_final.jsn".format(outputfile)
+   final_network_numpy = "{}_final.npy".format(outputfile)
 
     # currennt cfg files
     with open(config_name, 'w') as currennt_cfg:
-        final_network = "{}_final.jsn".format(outputfile)
         if not args.cuda:
             currennt_cfg.write(conf_line('cuda', 'false'))
         # IO
@@ -188,11 +190,16 @@ def main():
     run_currennt_noisy(config_name, device=args.device)
 
     # Currennt won't pass through our meta in the model, amend the output
+    # and write out a numpy version of the network
+    mod = json.load(open(final_network, 'r'))
     if mod_meta is not None:
         print "Adding model meta to currennt final network"
-        mod = json.load(open(final_network, 'r'))
         mod['meta'] = mod_meta
         json.dump(mod, open(final_network, 'w'))
+    print "Transforming network to numpy pickle"
+    mod = network_to_numpy(mod)
+    np.save(final_network_numpy, mod)
+        
 
 
 if __name__ == '__main__':
