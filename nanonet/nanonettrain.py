@@ -7,6 +7,7 @@ import sys
 import pkg_resources
 import tempfile
 import subprocess
+import numpy as np
 
 from nanonet import run_currennt_noisy
 from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
