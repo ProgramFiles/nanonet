@@ -13,7 +13,7 @@ from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
 from nanonet.fast5 import iterate_fast5
 from nanonet.features import make_currennt_training_input_multi
 from nanonet.util import random_string, conf_line
-from nanonet.current_to_pickle import network_to_numpy
+from nanonet.currennt_to_pickle import network_to_numpy
 
 
 def get_parser():
