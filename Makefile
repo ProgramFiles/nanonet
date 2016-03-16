@@ -10,7 +10,6 @@ deb: clean
 	touch tmp
 	rm -rf tmp *.deb
 	python setup.py --command-packages=stdeb.command bdist_deb
-	./repack_deb.sh
 
 clean:
 	python setup.py clean
