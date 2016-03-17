@@ -18,8 +18,8 @@ Ubuntu. These will perform a full install of all components including currennt.
     sudo apt-get -y install cuda-cudart-7-5 cuda-cublas-7-5 netcdf-bin libboost-all-dev
 
     wget https://github.com/nanoporetech/currennt/releases/download/v0.2-rc1-2/python-netcdf4_1.2.3-1_amd64.deb \
-        https://github.com/nanoporetech/currennt/releases/download/v0.2-rc1-2/ont-currennt-0.2.1-3-trusty.deb \
-        https://github.com/nanoporetech/nanonet/releases/download/v1.1.2/python-nanonet_1.1.3-1_amd64.deb
+         https://github.com/nanoporetech/currennt/releases/download/v0.2-rc1-2/ont-currennt-0.2.1-3-trusty.deb \
+         https://github.com/nanoporetech/nanonet/releases/download/v1.1.2/python-nanonet_1.1.3-1_amd64.deb
 
     sudo dpkg -i python-netcdf4_1.2.3-1_amd64.deb ont-currennt_0.2.1-2-trusty_amd64.deb python-nanonet_1.1.3-1_amd64.deb
     # expect an error here about missing prerequisite packages, which can be corrected with:
@@ -46,10 +46,9 @@ https://github.com/nanoporetech/currennt/blob/master/Makefile
 
 **Installation of nanonet**
 
-Nanonet is a mostly python with a single C library for performing Viterbi
-decoding on the probability matrix output by currennt. Installation is
-complicated only by the fact that currennt requires as input netCDF files.
-We must first install some prequisites:
+Nanonet is a pure python library. Installation is complicated only by the
+fact that currennt requires as input netCDF files. We must first install
+some prequisites:
 
     sudo apt-get install -y netcdf-bin libhdf5-dev python-h5py python-numpy cython 
 
@@ -57,8 +56,10 @@ Nanonet should then install quite trivially using the standard python
 mechanisms:
 
     cd nanonet
-    python setup.py install
+    pip install -e .[currennt]
 
+pip is used here to force installation of the optional dependencies
+required to support currennt.
 
 Installation on OSX
 -------------------
@@ -95,12 +96,14 @@ Currennt can then be built as for Ubuntu:
 
 **Installation of nanonet**
 
-The python components can be installed using the setup script:
+The python components can be installed using the setup script as in
+the case of Ubuntu:
 
     cd nanonet
-    python setup.py develop --user
+    pip install -e .[currennt]
     
-to perform an inplace install.
+which will install all dependencies including those required to
+support interoperability with currennt.
 
 
 Installation on Windows
@@ -186,3 +189,6 @@ For each of these run the following at a command prompt:
 Following this one can install nanonet with:
 
     python setup.py install
+
+Unlike the Ubuntu and OSX cases we need not force installation of the
+optional dependencies, as these have been handled above.
