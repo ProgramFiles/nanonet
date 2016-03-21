@@ -42,8 +42,8 @@ def get_parser():
     parser.add_argument("--model", action=FileExist,
         default=pkg_resources.resource_filename('nanonet', 'data/default_model.tmpl'),
         help="ANN configuration file")
-    parser.add_argument("--model_params", nargs=2, default=(None, None),
-        help="Specify n_features and n_classes for templated models.")
+    parser.add_argument("--model_params", nargs=3, default=(None, 65, 4), type=int,
+        help="Specify n_features, n_classes, n_bases for templated models. #TODO: needs untangling.")
     parser.add_argument("--device", type=int, default=0,
         help="ID of CUDA device to use.")
     parser.add_argument("--cuda", default=False, action=AutoBool,
@@ -94,8 +94,11 @@ def main():
         args.workspace, 'nn_{}.cfg'.format(tag)
     ))
     
+    n_features, n_states, n_bases = args.model_params
+    kmer_len = int(np.log(n_states - 1) / np.log(n_bases))
+    callback_kwargs={'section':args.section, 'kmer_len':kmer_len}
+
     # make training nc file
-    n_features, n_states = args.model_params
     if os.path.isdir(args.train):
         temp_file = '{}{}'.format(temp_name, 'train.netcdf')
         print "Creating training data NetCDF: {}".format(temp_file)
@@ -104,7 +107,8 @@ def main():
             fast5_files=fast5_files, 
             netcdf_file=temp_file,
             window=args.window,
-            callback_kwargs={'section':args.section}
+            kmer_len=kmer_len,
+            callback_kwargs=callback_kwargs
         )
         if n_chunks == 0:
             raise RuntimeError("No training data written.")
@@ -113,7 +117,7 @@ def main():
         print "Using precomputed training data: {}".format(trainfile)
         with open(modelfile, 'r') as model:
             data = model.read()
-        if '<n_features>' in data and args.model_params == (None, None):
+        if '<n_features>' in data and n_features is None:
             print "To use precomputed features must specify --model_params\n"
             sys.exit(1)
 
@@ -127,16 +131,18 @@ def main():
             fast5_files=fast5_files, 
             netcdf_file=temp_file, 
             window=args.window,
-            callback_kwargs={'section':args.section}
+            kmer_len=kmer_len,
+            callback_kwargs=callback_kwargs
         )
         valfile=temp_file
     else:
         print "Using precomputed validation data: ".format(valfile)
         with open(modelfile, 'r') as model:
             data = model.read()
-        if '<n_features>' in data and args.model_params == (None, None):
+        if '<n_features>' in data and n_features is None:
             print "To use precomputed features must specify --model_params\n"
             sys.exit(1)
+
 
     # fill-in templated items in model
     with open(modelfile, 'r') as model:

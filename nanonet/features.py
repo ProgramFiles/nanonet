@@ -175,7 +175,7 @@ def chunker(array, chunk_size):
         yield array[i:i+chunk_size]
 
 
-def get_events_ont_mapping(filename, section='template'):
+def get_events_ont_mapping(filename, kmer_len=3, section='template'):
     """Scrape event-alignment data from .fast5
     
     :param filename: input file.
@@ -203,7 +203,7 @@ def get_labels_ont_mapping(filename, kmer_len=3, section='template'):
                 'kmers in mapping file are {}mers, but requested {}mers.'.format(
                 base_kmer_len, kmer_len
             ))
-        k1 = len(events['kmer'][0])/2 - 1
+        k1 = len(events['kmer'][0])/2 - kmer_len/2 - 1
         k2 = k1 + kmer_len
         y = np.fromiter(
             (k[k1:k2] for k in events['kmer']),
@@ -214,7 +214,7 @@ def get_labels_ont_mapping(filename, kmer_len=3, section='template'):
     return y
 
 
-def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 1], kmer_len=3, chunk_size=1000, min_chunk=900, trim=10, get_events=get_events_ont_mapping, get_labels=get_labels_ont_mapping, callback_kwargs={'section':'template'}):
+def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 1], kmer_len=3, chunk_size=1000, min_chunk=900, trim=10, get_events=get_events_ont_mapping, get_labels=get_labels_ont_mapping, callback_kwargs={'section':'template', 'kmer_len':3}):
     """Write NetCDF file for training/validation input to currennt.
 
     :param fast5_list: list of .fast5 files to process
