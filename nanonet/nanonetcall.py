@@ -59,11 +59,12 @@ def get_parser():
     return parser
 
 
-def process_read(modelfile, fast5, min_prob=1e-5, trans=None, **kwargs):
+def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, **kwargs):
     """Run neural network over a set of fast5 files
 
     :param modelfile: neural network specification.
     :param fast5: read file to process
+    :param post_only: return only the posterior matrix
     :param **kwargs: kwargs of make_basecall_input_multi
     """
     kmer_len = 3 #TODO: parameterise this
@@ -99,6 +100,8 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, **kwargs):
     post = post[:, :-1]
     post[:, kmer_out_order] = post[:, kmer_order]
     post /= np.sum(post, axis=1).reshape((-1, 1))
+    if post_only:
+        return post
 
     post = min_prob + (1.0 - min_prob) * post
     trans = decoding.estimate_transitions(post, trans=trans)
