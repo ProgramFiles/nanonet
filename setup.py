@@ -43,7 +43,7 @@ setup(
     include_package_data=True,
     tests_require=requires,
     install_requires=requires,
-    extras_require=extras_requires,
+    extras_require=extra_requires,
     dependency_links=[],
     zip_safe=True,
     ext_modules=extensions,
