@@ -111,7 +111,7 @@ def basecall2d(args, fast5):
         if post_tmp is None:
             raise RuntimeError('Could not form template posterior')
     except Exception as e:
-        return (args.fast5,)
+        return (fast5,)
     else:
         post_tmp = args.min_prob + (1.0 - args.min_prob) * post_tmp
         trans_tmp = decoding.estimate_transitions(post_tmp, trans=args.trans)
@@ -126,7 +126,7 @@ def basecall2d(args, fast5):
         if post_comp is None:
             raise RuntimeError('Could not form complement posterior')
     except:
-        return (args.fast5,)
+        return (fast5,)
     else:
         post_comp = args.min_prob + (1.0 - args.min_prob) * post_comp
         trans_comp = decoding.estimate_transitions(post_comp, trans=args.trans)
