@@ -185,8 +185,8 @@ def basecall2d(args, fast5):
     stay_comp = stay_comp[::-1]
 
     vit = viterbi_2d.Viterbi2D(vit_model, vit_model2, params)
-    res = vit.call_post(post_tmp.astype(np.float32), #stay_tmp,
-                        post_comp.astype(np.float32), #stay_comp,
+    res = vit.call_post(post_tmp.astype(np.float32), post_comp.astype(np.float32),
+                        stay_tmp, stay_comp,
                         align_in, prior)
 
     kmers = seq_tools.all_kmers(length=args.kmer)
