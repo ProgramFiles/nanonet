@@ -67,8 +67,6 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, *
     :param post_only: return only the posterior matrix
     :param **kwargs: kwargs of make_basecall_input_multi
     """
-    kmer_len = 3 #TODO: parameterise this
-
     t0 = timeit.default_timer()
     try:
         name, features = make_basecall_input_multi((fast5,), **kwargs).next()
@@ -83,22 +81,11 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, *
     post = network.run(features.astype(nn.tang_nn_type))
     t2 = timeit.default_timer()
 
-    # Reorder ATGC -> ACGT, models are trained with funny order
-    kmers_nn = all_nmers(kmer_len)
-    kmers_nn_revmap = {k:i for i, k in enumerate(kmers_nn)}
-    kmers_hmm = sorted(kmers_nn)
-    nkmers = len(kmers_nn)
-    kmer_out_order = np.arange(nkmers)
-    kmer_order = np.fromiter(
-        (kmers_nn_revmap[k] for k in kmers_hmm),
-        dtype=int, count=len(kmers_hmm)
-    )
-
     # Strip out events where XXX most likely, and XXX states entirely 
+    bad_kmer = post.shape[1] - 1
     max_call = np.argmax(post, axis=1)
-    post = post[max_call < nkmers]
+    post = post[max_call != bad_kmer]
     post = post[:, :-1]
-    post[:, kmer_out_order] = post[:, kmer_order]
     post /= np.sum(post, axis=1).reshape((-1, 1))
     if post_only:
         return post
@@ -107,7 +94,12 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, *
     trans = decoding.estimate_transitions(post, trans=trans)
     score, states = decoding.decode_profile(post, trans=trans, log=False)
 
-    kmer_path = [kmers_hmm[i] for i in states]
+    #TODO: Assuming only ACGT for now
+    n_bases = 4
+    n_states = post.shape[1]
+    kmer_len = int(np.log(n_states) / np.log(n_bases))
+    kmers = all_nmers(kmer_len)
+    kmer_path = [kmers[i] for i in states]
     seq = kmers_to_sequence(kmer_path)
     t3 = timeit.default_timer()
 

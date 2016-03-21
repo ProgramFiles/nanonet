@@ -9,8 +9,7 @@ import math
 
 __eta__ = 1e-100
 
-# N.B. this defines the order of our states, it is not lexographical by default!
-def all_nmers(n=3, alpha='ATGC'):
+def all_nmers(n=3, alpha='ACGT'):
     return [''.join(x) for x in product(alpha, repeat=n)]
 
 
