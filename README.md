@@ -65,6 +65,15 @@ will produced output along the following lines:
     Run network: 13.4354393482
     Decoding: 7.09250092506
 
+**Input files**
+
+nanonetcall is rather limited in its preprocessing of input data. It does not
+currently contain an event detection module and its heuristics for locating
+the hairpin within 2D reads are inflexible. Event detection for the current
+R9 developer release is performed in the cloud by Metirchor. It is advisable
+therefore to first pass reads through a Metrichor workflow to perform these tasks,
+giving nanonet as input the files which come back from Metrichor.
+
 
 **Using multiple CPUs**
 
