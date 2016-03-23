@@ -46,7 +46,7 @@ def get_parser():
         help="Max. read length (events) to basecall.")
     
     parser.add_argument("--model", type=str, action=FileExist,
-        default=pkg_resources.resource_filename('nanonet', 'data/template_model.npy'),
+        default=pkg_resources.resource_filename('nanonet', 'data/default_template.npy'),
         help="Trained ANN.")
     parser.add_argument("--decoding_jobs", default=1, type=int, action=CheckCPU,
         help="No of decoding jobs to run in parallel.")
