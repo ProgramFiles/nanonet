@@ -55,7 +55,7 @@ To test your installation several .fast5 files are provided in the
 `sample_data` folder of the source distribution, as a concrete example the
 command:
 
-    nanonetcall --decoding_jobs 5 sample_data > basecalls.fa
+    nanonetcall --jobs 5 sample_data > basecalls.fa
 
 will produced output along the following lines:
 
