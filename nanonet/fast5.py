@@ -17,11 +17,14 @@ class Fast5(h5py.File):
     Needs some development to make robust and for writing.
 
     """
-
     __base_analysis__ = '/Analyses'
     __event_detect_name__ = 'EventDetection'
+    __default_event_path__ = 'Reads'
     __raw_path__ = '/Raw/Reads'
-    __event_path__ = '{}/{}_000/Reads/'.format(__base_analysis__, __event_detect_name__)
+    __raw_name_old__ = 'RawData'
+    __raw_path_old__ = '{}/{}/'.format(__base_analysis__, __raw_name_old__)
+    __raw_signal_path_old__ = '{}/Signal'.format(__raw_path_old__)
+    __raw_meta_path_old__ = '{}/Meta'.format(__raw_path_old__)
     __channel_meta_path__ = '/UniqueGlobalKey/channel_id'
     __tracking_id_path__ = 'UniqueGlobalKey/tracking_id'
     __context_tags_path__ = 'UniqueGlobalKey/context_tags'
@@ -232,7 +235,9 @@ class Fast5(h5py.File):
         :param group: return hdf group rather than event data
         """
         if not raw:
-            reads = self[self.__event_path__]
+            event_group = self.get_analysis_latest(self.__event_detect_name__)
+            event_path = self._join_path(event_group, self.__default_event_path__)
+            reads = self[event_path]
         else:
             try:
                 reads = self[self.__raw_path__]
@@ -691,7 +696,6 @@ class Fast5(h5py.File):
             try:
                 events = self[event_path][()]
             except:
-                print "1. could not get events from", event_path
                 raise ValueError('Could not retrieve squiggle_mapping data from {}'.format(event_path))
             attrs = self.get_mapping_attrs(section=section)
     
@@ -702,7 +706,6 @@ class Fast5(h5py.File):
             try:
                 events = self[event_path][()]
             except:
-                print "2. could not get events from", event_path
                 raise ValueError('Could not retrieve substep_mapping data from {}'.format(event_path))
             attrs=None
 
@@ -829,7 +832,6 @@ class Fast5(h5py.File):
                 attrs = self.get_mapping_attrs(section=section,
                     analysis=self.__default_alignment_analysis__)
             except Exception as e:
-                print str(e)
                 raise ValueError(
                     "Cannot find any mapping data at paths I know about in {}. "
                     "Consider using get_mapping_data() with analysis argument."

@@ -138,7 +138,7 @@ def main():
     timings = [0.0, 0.0, 0.0, 0.0]
     fast5_files = iterate_fast5(args.input, paths=True, strand_list=args.strand_list, limit=args.limit)
     with FastaWrite(args.output) as fasta:
-        for result in tang_imap(process_read, fast5_files, fix_args=fix_args, fix_kwargs=fix_kwargs, threads=args.decoding_jobs):
+        for result in tang_imap(process_read, fast5_files, fix_args=fix_args, fix_kwargs=fix_kwargs, threads=args.jobs):
             if result is None:
                 continue
             name, basecall, _, n_ev, time = result
