@@ -42,8 +42,13 @@ def get_parser():
     parser.add_argument("--model", action=FileExist,
         default=pkg_resources.resource_filename('nanonet', 'data/default_model.tmpl'),
         help="ANN configuration file")
-    parser.add_argument("--model_params", nargs=3, default=(None, 65, 4), type=int,
-        help="Specify n_features, n_classes, n_bases for templated models. #TODO: needs untangling.")
+    parser.add_argument("--n_features", type=int, default=None,
+        help="Network parameters for templated models.")
+    parser.add_argument("--kmer_length", type=int, default=None,
+        help="Length of kmers to learn.")
+    parser.add_argument("--bases", type=str, default='ACGT',
+        help="Alphabet of kmers to learn.")
+
     parser.add_argument("--device", type=int, default=0,
         help="ID of CUDA device to use.")
     parser.add_argument("--cuda", default=False, action=AutoBool,
@@ -94,57 +99,41 @@ def main():
         args.workspace, 'nn_{}.cfg'.format(tag)
     ))
     
-    n_features, n_states, n_bases = args.model_params
-    kmer_len = int(np.log(n_states - 1) / np.log(n_bases))
-    callback_kwargs={'section':args.section, 'kmer_len':kmer_len}
+    callback_kwargs={'section':args.section, 'kmer_len':args.kmer_length}
 
     # make training nc file
-    if os.path.isdir(args.train):
-        temp_file = '{}{}'.format(temp_name, 'train.netcdf')
-        print "Creating training data NetCDF: {}".format(temp_file)
-        fast5_files = list(iterate_fast5(trainfile, paths=True, strand_list=args.train_list))
-        n_chunks, n_features, n_states = make_currennt_training_input_multi(
-            fast5_files=fast5_files, 
-            netcdf_file=temp_file,
-            window=args.window,
-            kmer_len=kmer_len,
-            callback_kwargs=callback_kwargs
-        )
-        if n_chunks == 0:
-            raise RuntimeError("No training data written.")
-        trainfile = temp_file
-    else:
-        print "Using precomputed training data: {}".format(trainfile)
-        with open(modelfile, 'r') as model:
-            data = model.read()
-        if '<n_features>' in data and n_features is None:
-            print "To use precomputed features must specify --model_params\n"
-            sys.exit(1)
+    temp_file = '{}{}'.format(temp_name, 'train.netcdf')
+    print "Creating training data NetCDF: {}".format(temp_file)
+    fast5_files = list(iterate_fast5(trainfile, paths=True, strand_list=args.train_list))
+    n_chunks, n_features, out_kmers = make_currennt_training_input_multi(
+        fast5_files=fast5_files, 
+        netcdf_file=temp_file,
+        window=args.window,
+        kmer_len=args.kmer_length,
+        alphabet=args.bases,
+        callback_kwargs=callback_kwargs
+    )
+    if n_chunks == 0:
+        raise RuntimeError("No training data written.")
+    trainfile = temp_file
 
-    
-    # make validation nc file
-    if os.path.isdir(args.val):
-        temp_file = '{}{}'.format(temp_name, 'validation.netcdf')
-        print "Creating validation data NetCDF: {}".format(temp_file)
-        fast5_files = list(iterate_fast5(valfile, paths=True, strand_list=args.val_list))
-        make_currennt_training_input_multi(
-            fast5_files=fast5_files, 
-            netcdf_file=temp_file, 
-            window=args.window,
-            kmer_len=kmer_len,
-            callback_kwargs=callback_kwargs
-        )
-        valfile=temp_file
-    else:
-        print "Using precomputed validation data: ".format(valfile)
-        with open(modelfile, 'r') as model:
-            data = model.read()
-        if '<n_features>' in data and n_features is None:
-            print "To use precomputed features must specify --model_params\n"
-            sys.exit(1)
+    # make validation nc file 
+    temp_file = '{}{}'.format(temp_name, 'validation.netcdf')
+    print "Creating validation data NetCDF: {}".format(temp_file)
+    fast5_files = list(iterate_fast5(valfile, paths=True, strand_list=args.val_list))
+    make_currennt_training_input_multi(
+        fast5_files=fast5_files, 
+        netcdf_file=temp_file, 
+        window=args.window,
+        kmer_len=args.kmer_length,
+        alphabet=args.bases,
+        callback_kwargs=callback_kwargs
+    )
+    valfile=temp_file
 
 
     # fill-in templated items in model
+    n_states = len(out_kmers)
     with open(modelfile, 'r') as model:
         mod = model.read()
     mod = mod.replace('<section>', args.section)
@@ -153,7 +142,10 @@ def main():
     try:
         mod_meta = json.loads(mod)['meta']
     except Exception as e:
-        mod_meta = None
+        mod_meta = dict()
+    mod_meta['n_features'] = n_features
+    mod_meta['kmers'] = out_kmers
+    mod_meta['window'] = args.window
 
     modelfile = os.path.abspath(os.path.join(
         args.workspace, 'input_model.jsn'
@@ -199,10 +191,9 @@ def main():
     # Currennt won't pass through our meta in the model, amend the output
     # and write out a numpy version of the network
     mod = json.load(open(final_network, 'r'))
-    if mod_meta is not None:
-        print "Adding model meta to currennt final network"
-        mod['meta'] = mod_meta
-        json.dump(mod, open(final_network, 'w'))
+    print "Adding model meta to currennt final network"
+    mod['meta'] = mod_meta
+    json.dump(mod, open(final_network, 'w'))
     print "Transforming network to numpy pickle"
     mod = network_to_numpy(mod)
     np.save(final_network_numpy, mod)

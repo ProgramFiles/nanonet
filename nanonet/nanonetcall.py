@@ -68,24 +68,32 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, *
     :param **kwargs: kwargs of make_basecall_input_multi
     """
     t0 = timeit.default_timer()
+    network = np.load(modelfile).item()
+    t1 = timeit.default_timer()
+    load_time = t1 - t0
+
+    kwargs['window'] = network.meta['window']
+
     try:
         name, features = make_basecall_input_multi((fast5,), **kwargs).next()
     except Exception as e:
-        return None 
-    t1 = timeit.default_timer()
-    feature_time = t1 - t0
-
-    t0 = timeit.default_timer()
-    network = np.load(modelfile).item()
-    t1 = timeit.default_timer()
-    post = network.run(features.astype(nn.tang_nn_type))
+        return None
     t2 = timeit.default_timer()
+    feature_time = t2 - t1
 
-    # Strip out events where XXX most likely, and XXX states entirely 
-    bad_kmer = post.shape[1] - 1
-    max_call = np.argmax(post, axis=1)
-    post = post[max_call != bad_kmer]
-    post = post[:, :-1]
+    post = network.run(features.astype(nn.tang_nn_type))
+    t3 = timeit.default_timer()
+    network_time = t3 - t2
+
+    kmers = network.meta['kmers']
+    # Do we have an XXX kmer? Strip out events where XXX most likely,
+    #    and XXX states entirely
+    if kmers[-1] == 'X'*len(kmers[-1]):
+        bad_kmer = post.shape[1] - 1
+        max_call = np.argmax(post, axis=1)
+        post = post[max_call != bad_kmer]
+        post = post[:, :-1]
+
     post /= np.sum(post, axis=1).reshape((-1, 1))
     if post_only:
         return post
@@ -94,16 +102,13 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, *
     trans = decoding.estimate_transitions(post, trans=trans)
     score, states = decoding.decode_profile(post, trans=trans, log=False)
 
-    #TODO: Assuming only ACGT for now
-    n_bases = 4
-    n_states = post.shape[1]
-    kmer_len = int(np.log(n_states) / np.log(n_bases))
-    kmers = all_nmers(kmer_len)
+    # Form basecall
     kmer_path = [kmers[i] for i in states]
     seq = kmers_to_sequence(kmer_path)
-    t3 = timeit.default_timer()
+    t4 = timeit.default_timer()
+    decode_time = t4 -t3
 
-    return (name, seq, score, len(post), (feature_time, t1 - t0, t2 - t1, t3 - t2))
+    return (name, seq, score, len(post), (feature_time, load_time, network_time, decode_time))
 
 
 def main():
@@ -123,7 +128,6 @@ def main():
         modelfile
     ]
     fix_kwargs = {
-        'window':args.window,
         'min_len':args.min_len,
         'max_len':args.max_len,
         'section':args.section

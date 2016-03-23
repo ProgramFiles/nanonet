@@ -214,12 +214,14 @@ def get_labels_ont_mapping(filename, kmer_len=3, section='template'):
     return y
 
 
-def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 1], kmer_len=3, chunk_size=1000, min_chunk=900, trim=10, get_events=get_events_ont_mapping, get_labels=get_labels_ont_mapping, callback_kwargs={'section':'template', 'kmer_len':3}):
+def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 1], kmer_len=3, alphabet='ACGT', chunk_size=1000, min_chunk=900, trim=10, get_events=get_events_ont_mapping, get_labels=get_labels_ont_mapping, callback_kwargs={'section':'template', 'kmer_len':3}):
     """Write NetCDF file for training/validation input to currennt.
 
     :param fast5_list: list of .fast5 files to process
     :param netcdf_file: output .netcdf file 
     :param window: event window to derive features
+    :param kmer_len: length of kmers to learn
+    :param alphabet: alphabet of kmers
     :param chunk_size: chunk size to break reads into for SGE batching
     :param min_chunk: minimum chunk size (used to discard remainder of reads
     :param trim: no. of feature vectors to trim (from either end)
@@ -230,17 +232,19 @@ def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
     from netCDF4 import Dataset
 
     # We need to know ahead of time how wide our feature vector is,
-    #    lets generate one and take a peek.
-    with Fast5(fast5_files[0]) as fh:
-        ev = fh.get_read()
-    X = events_to_features(ev, window=window)
+    #    lets generate one and take a peek. Check also callbacks
+    #    produce meaningful data.
+    X = events_to_features(get_events(fast5_files[0], **callback_kwargs), window=window)
+    labels = get_labels(fast5_files[0], **callback_kwargs)
     inputPattSize = X.shape[1]
-
+    if len(X) != len(labels):
+        raise RuntimeError('Length of features and labels not equal.')
+    
     # Our state labels are kmers plus a junk kmer
-    all_kmers = all_nmers(kmer_len)
+    kmers = all_nmers(kmer_len, alpha=alphabet)
     bad_kmer = 'X'*kmer_len
-    all_kmers.append(bad_kmer)
-    all_kmers = {k:i for i,k in enumerate(all_kmers)}
+    kmers.append(bad_kmer)
+    all_kmers = {k:i for i,k in enumerate(kmers)}
 
     with Dataset(netcdf_file, "w", format="NETCDF4") as ncroot:
         #Set dimensions
@@ -262,19 +266,30 @@ def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
                 # Run callbacks to get features and labels
                 X = events_to_features(get_events(f, **callback_kwargs), window=window)
                 labels = get_labels(f, **callback_kwargs)
+            except:
+                print "Skipping: {}".format(f)
+                continue
 
+            try:   
                 X = X[trim:-trim]
                 labels = labels[trim:-trim]
                 if len(X) != len(labels):
                     raise RuntimeError('Length of features and labels not equal.')
+            except:
+                print "Skipping: {}".format(f)
 
+            try:
                 # convert kmers to ints
                 y = np.fromiter(
                     (all_kmers[k] for k in labels),
                     dtype=np.int16, count=len(labels)
                 )
-            except Exception as e:
-                print "Skipping: {}".format(f)
+            except:
+                # Checks for erroneous alphabet or kmer length
+                raise RuntimeError(
+                    'Could not convert kmer labels to ints in file {}. '
+                    'Check labels are no longer than {} and contain only {}'.format(f, kmer_len, alpha)
+                )
             else:
                 print "Adding: {}".format(f)
                 for chunk, (X_chunk, y_chunk) in enumerate(izip(chunker(X, chunk_size), chunker(y, chunk_size))):
@@ -295,7 +310,7 @@ def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
                     inputs[curr_numTimesteps:] = X_chunk
                     targetClasses[curr_numTimesteps:] = y_chunk
 
-    return chunks_written, inputPattSize, len(all_kmers)
+    return chunks_written, inputPattSize, kmers
 
 
 class SquiggleFeatureGenerator(object):
