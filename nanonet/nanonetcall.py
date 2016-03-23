@@ -48,7 +48,7 @@ def get_parser():
     parser.add_argument("--model", type=str, action=FileExist,
         default=pkg_resources.resource_filename('nanonet', 'data/default_template.npy'),
         help="Trained ANN.")
-    parser.add_argument("--decoding_jobs", default=1, type=int, action=CheckCPU,
+    parser.add_argument("--jobs", default=1, type=int, action=CheckCPU,
         help="No of decoding jobs to run in parallel.")
 
     parser.add_argument("--trans", type=float, nargs=3, default=None,
