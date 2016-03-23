@@ -65,6 +65,15 @@ will produced output along the following lines:
     Run network: 13.4354393482
     Decoding: 7.09250092506
 
+**Input files**
+
+nanonetcall is rather limited in its preprocessing of input data. It does not
+currently contain an event detection module and its heuristics for locating
+the hairpin within 2D reads are inflexible. Event detection for the current
+R9 developer release is performed in the cloud by Metirchor. It is advisable
+therefore to first pass reads through a Metrichor workflow to perform these tasks,
+giving nanonet as input the files which come back from Metrichor.
+
 
 **Using multiple CPUs**
 
@@ -84,16 +93,14 @@ please refer to the full installation instructions in INSTALLATION.md.
 
 To run the trainer we specify training data, and validation data. The former
 will be used to train the network whilst the latter is used to check that the
-network does not become overtrained to the test data.
+network does not become overtrained to the training data.
 
     nanonettrain --train <training_data> --val <validation_data> \
         --output <output_model_prefix> --model <input_model_spec>
 
 An example input model can be found in `nanonet/data/default_model.tmpl`.
-Currently the only supported models are those based on three-mers. (Though most
-of the code supported generic kmers, the C code for Viterbi decoding does not).
 The only other consideration is that the size of the first ("input") layer of
-the network must correspond to the featur vectors created by
+the network must correspond to the feature vectors created by
 `nanonet.features.events_to_features`. The nanonettrain program will try to
 enforce these considerations. In contructing models one should assign the
 input layer a size of `<n_features>` and the final two layers as `<n_states>`,
