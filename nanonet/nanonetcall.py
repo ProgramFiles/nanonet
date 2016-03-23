@@ -53,8 +53,6 @@ def get_parser():
 
     parser.add_argument("--trans", type=float, nargs=3, default=None,
         metavar=('stay', 'step', 'skip'), help='Base transition probabilities')
-    parser.add_argument("--window", type=int, nargs='+', default=[-1, 0, 1],
-        help="The detailed list of the entire input window, default -1 0 1, tested with R7.3 to be optimal.")
 
     return parser
 
