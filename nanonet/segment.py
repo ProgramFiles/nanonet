@@ -1,60 +1,93 @@
 import collections
-
 import numpy as np
 
+
 __config__ = {
-    'trim_end': '0',
-    'trim_front': '500', 
-    'max_pt_search_len': '3.0', 
-    'pt_window': '0.5', 
-    'mad_threshold': '4.0', 
-    'min_peak_dur': '0', 
-    'min_pt_dur': '0.0', 
-    'peak_threshold': '0.0', 
-    'mode': 'abasic', 
-    'pt_drop': '1.5', 
-    'trim_hairpin': '5', 
-    'da_min_pt_dur': '0.1', 
-    'min_events': '200', 
-    'da_min_peak_dur': '0.1', 
-    'first_n': '100', 
-    'abasic_range_backup': '0'
-} 
+    'mode'                 :'double_abasic',
+    'trim_front'           :5,
+    'trim_hairpin'         :5,
+    'trim_end'             :0,
+    'first_n'              :100,
+    'min_events'           :200,
+    'min_peak_dur'         :0.001,
+    'mad_threshold'        :3.0,
+    'peak_threshold'       :0.0,
+    'min_pt_dur'           :0.15,
+    'pt_window'            :0.5,
+    'pt_drop'              :0.0,
+    'max_pt_search_len'    :3.0,
+    'da_min_peak_dur'      :0.005, #0.02
+    'da_min_pt_dur'        :0.005, #0.0
+    'abasic_range_backup'  :False,
+    'use_first_abasic'     :True,
+}
 
 
-def segment_wrapper(fh, section='template', config=__config__):
-    """Try reading template-complement split point data from file
-    or fall back to attempting it ourselves.
-
-    """
-    try:
-        events = fh.get_section_events(section)
-    except:
-        return split_hairpin(fh.get_read(), section, config)
-    else:
-        return events, None
-
-
-def split_hairpin(data, section='template', config=__config__):
+def segment(events, section='template', config=__config__):
     """Splitting even data into template and complement sections, returns
     requested section.
 
-    :param data: Event data from a read fast5 file.
-    :param config: A configuration parameters object
-    :returns: A tuple of
-
-        * Template event data
-        * Complement event data
-        * A results summary
-    :rtype: Tuple
+    :param events: event data.
+    :param config: a configuration parameters object
 
     """
     assert section in ('template', 'complement'), "section should be template/complement."
-    data1, data2, results = split_hairpin_abasic(data, config)
+
+    # Locate stall
+    med, mad = med_mad(events['mean'][-100:])
+    max_thresh = med + 1.48 * 2 + mad
+    first_event = locate_stall(events, max_thresh)
+    events = events[first_event:]
+
+    data1, data2, results = split_hairpin_abasic(events, config)
+
+    results = {k:results[k] for k in ('start_index_temp', 'end_index_temp', 'start_index_comp', 'end_index_comp')}
+    results['first_event'] = first_event
+
     if section == 'template':
         return data1, results
     else:
         return data2, results
+
+
+def locate_stall(events, max_threshold, min_events=3):
+    """Remove stall section of a read, if present
+
+    :param events: numpy array of events
+    :param max_threshold: threshold above which the beginning will be discarded
+        e.g. 2 stdvs of the mean model level above median of final 100 events
+    :param min_events: minimum number of events we need to see under the threshold before we
+        consider the stall to have ended.
+    :returns: new sample number at which to start data
+    """
+    # For when the stall starts below the max_threshold:
+    count_above = 0
+    start_ev_ind = 0
+    for ev_ind, event in enumerate(events[:100]):
+        if event['mean'] <= max_threshold:
+            count_above = 0
+        else:
+            count_above += 1
+
+        if count_above == 2:
+            start_ev_ind = ev_ind - 1
+            break
+        
+    new_start = 0
+    count = 0
+    for idx in range(start_ev_ind, len(events)):
+        if events['mean'][idx] > max_threshold:
+            count = 0
+        else:
+            count += 1
+
+        if count == min_events:
+            # find the time the first event went below - taking just the number
+            # away gets the last time *above* the threshold, so add 1
+            new_start = idx - min_events + 1
+            break
+
+    return new_start
 
 
 def split_hairpin_abasic(data, parms):
@@ -68,23 +101,24 @@ def split_hairpin_abasic(data, parms):
     template_data = None
     complement_data = None
 
-    trim_front = int(parms['trim_front'])
-    trim_hairpin = int(parms['trim_hairpin'])
-    trim_end = int(parms['trim_end'])
-    min_events = int(parms['min_events'])
+    trim_front = parms['trim_front']
+    trim_hairpin = parms['trim_hairpin']
+    trim_end = parms['trim_end']
+    min_events = parms['min_events']
     if parms['mode'] != 'none':
-        first_n = int(parms['first_n'])
-        peak_threshold = float(parms['peak_threshold'])
-        mad_threshold = float(parms['mad_threshold'])
-        min_peak_dur = float(parms['min_peak_dur'])
-        min_pt_dur = float(parms['min_pt_dur'])
-        pt_window = float(parms['pt_window'])
-        pt_drop = float(parms['pt_drop'])
-        pt_search_len = float(parms['max_pt_search_len'])
-        da_min_peak_dur = float(parms['da_min_peak_dur'])
-        da_min_pt_dur = float(parms['da_min_pt_dur'])
-        abasic_range_backup = bool(int(parms['abasic_range_backup']))
+        first_n = parms['first_n']
+        peak_threshold = parms['peak_threshold']
+        mad_threshold = parms['mad_threshold']
+        min_peak_dur = parms['min_peak_dur']
+        min_pt_dur = parms['min_pt_dur']
+        pt_window = parms['pt_window']
+        pt_drop = parms['pt_drop']
+        pt_search_len = parms['max_pt_search_len']
+        da_min_peak_dur = parms['da_min_peak_dur']
+        da_min_pt_dur = parms['da_min_pt_dur']
+        abasic_range_backup = parms['abasic_range_backup']
         double = (parms['mode'] == 'double_abasic')
+        use_first_abasic = parms['use_first_abasic']
 
     num_events = data.size
     a, b, c, d = (0, 0, 0, 0)
@@ -101,20 +135,25 @@ def split_hairpin_abasic(data, parms):
             a = 0
             b = 0
     else:
-        la_peak, la_pos, la_dur, hp_peak, hp_pos, hp_events, hp_dur, pt_level, abasics_found = \
-            split_by_abasic(data,
-                            first_n,
-                            peak_threshold,
-                            mad_threshold,
-                            min_peak_dur,
-                            min_pt_dur,
-                            pt_window,
-                            pt_drop,
-                            double,
-                            pt_search_len,
-                            da_min_peak_dur,
-                            da_min_pt_dur,
-                            trim_front + trim_hairpin)
+        # First try trimming front abasic
+        trim_gap = trim_front + trim_hairpin
+        la_peak, la_pos, la_dur, first_n = find_leader_abasic(data, first_n,
+                                                     mad_threshold,
+                                                     min_peak_dur,
+                                                     trim_gap)
+        
+        # Then split by specified abasic
+        if double:
+            # Find if double abasic present
+            hp_peak, hp_pos, hp_events, hp_dur, pt_level, abasics_found = \
+                split_hairpin_double_abasic(data, first_n, mad_threshold, da_min_peak_dur,
+                                            da_min_pt_dur, pt_drop, pt_search_len, use_first_abasic)
+        else:
+            # Find if single abasic present
+            hp_peak, hp_pos, hp_events, hp_dur, pt_level, abasics_found = \
+                split_hairpin_single_abasic(data, first_n, mad_threshold, min_peak_dur,
+                                     min_pt_dur, pt_window, pt_drop)
+
         a = trim_front + la_pos if la_pos != -1 else trim_front
         b = hp_pos - trim_hairpin if hp_pos != -1 else num_events - trim_end
         c = hp_pos + hp_events + trim_hairpin if hp_pos != -1 else 0
@@ -186,80 +225,125 @@ def split_hairpin_abasic(data, parms):
     return template_data, complement_data, results
 
 
-def split_by_abasic(events, first_n=150, peak_threshold=0.0, mad_threshold=4.5, min_peak_dur=0,
-                    min_pt_dur=0.15, pt_window=0.5, pt_drop=1.5, double_abasic_hairpin=False,
-                    max_pt_search_distance=3, da_min_peak_dur=0.1, da_min_pt_dur=0.15, trim_gap=10):
-    """Find a split point by directly looking for abasic at hairpin.
-    This uses the abasic in the leader to help reject false positives.
+def find_leader_abasic(events, first_n=150, mad_threshold=4.5, min_peak_dur=0, trim_gap=10):
+    """Attempt to find a leader abasic at the beginning of a strand. This is performed by taking a
+    simple delta-mean of the raw data so that it's independent of normal event detection.
 
     :param events: numpy record array of events
-    :param first_n: number of events to use for finding the leader abasic
-    :param peak_threshold: fraction of the leader abasic height the hairpin abasic must reach
-    :param mad_threshold: number of mads above the median the abasics must exceed
-    :param min_peak_dur: minimum duration of the abasic
-    :param min_pt_dur: minimum duration of the pT
-    :param pt_window: length of time after hairpin abasic to search for pT
-    :param pt_drop: number of mads below the median the pT must be
-    :param bool double_abasic_hairpin: whether or not the hairpin should have two abasics
-    :param max_pt_search_distance: maximum time between double abasics
+    :param first_n: number of events to use for finding the leader abasic.
+    :param mad_threshold: number of mads above the median the abasic must exceed.
+    :param min_peak_dur: minimum duration of the abasic.
     :param trim_gap: minimum trim distance between the leader and hairpin abasics
-
     :returns: A tuple of:
 
         * height of the leader abasic peak (or 0 if not found)
         * location of the end of the leader abasic peak (or -1 if not found)
         * duration of the leader abasic peak (or 0 if not found)
+        * number of events to start from
+        
+    :rtype: tuple
+
+    .. note::
+        It's important to pass **all** the channel data in, and not just the first few samples, as
+        we may not get an accurate measurement of the median current level otherwise.
+
+    """
+    la_peak, la_pos, la_dur, la_events, _ = _find_abasic(events, events[:first_n],
+                                                         mad_threshold, min_peak_dur)
+    
+    if (la_pos != -1) and (la_pos + la_events >= first_n - trim_gap):
+        first_n = la_pos + la_events + trim_gap + 1
+    
+    return (la_peak, la_pos + la_events, la_dur, first_n)
+
+
+def split_hairpin_single_abasic(events, first_n=150, mad_threshold=4.5, min_peak_dur=0,
+                                min_pt_dur=0.15, pt_window=0.5, pt_drop=1.5):
+    """
+    Find the single abasic hairpin
+    :param events: numpy record array of events
+    :param first_n: number of events to use for finding the abasic
+    :param min_peak_dur: minimum duration of the abasic.
+    :param min_pt_dur: minimum duration of the pT
+    :param pt_window: length of time after hairpin abasic to search for pT
+    :param pt_drop: number of mads below the median the pT must be
+    :returns: A tuple of:
+    
+    * height of the leader abasic peak (or 0 if not found)
+        * location of the end of the leader abasic peak (or -1 if not found)
+        * duration of the leader abasic peak (or 0 if not found)
+        * events in the abasic (or 0 if not found)
+        * number of events to trim from the front (or left at what was passed in/default)
+    
+    :rtype: tuple
+        
+    """
+
+    hp_peak, hp_pos, hp_dur, hp_events, pt_level = _find_abasic(events[first_n:],
+                                                                events[first_n:],
+                                                                mad_threshold,
+                                                                min_peak_dur,
+                                                                min_pt_dur,
+                                                                pt_window,
+                                                                pt_drop)
+    abasics_found = 0
+    if hp_pos != -1:
+        abasics_found = 1
+
+    if hp_pos != -1:
+        hp_pos += first_n
+        
+    return (hp_peak, hp_pos, hp_events, hp_dur, pt_level, abasics_found)
+
+
+def split_hairpin_double_abasic(events, first_n=150, mad_threshold=4.5, min_peak_dur=0,
+                                min_pt_dur=0.15, pt_drop=1.5, max_pt_search_distance=3,
+                                use_first_abasic=False):
+    """
+    Find the double abasic hairpin
+    :param events: numpy record array of events
+    :param first_n: number of events to use for finding the abasic
+    :param min_peak_dur: minimum duration of the abasic
+    :param min_pt_dur: minimum duration of the pT
+    :param pt_drop: number of mads below the median the pT must be
+    :param max_pt_search_distance: maximum time between double abasics
+    :returns: A tuple of:
+    
         * height of the hairpin abasic peak (or 0 if not found)
         * location of the beginning of the (first) hairpin abasic (or -1 if not found)
         * number of events in the hairpin (or 0 if not found)
         * duration of the hairpin abasic peak(s) (or 0 if not found)
         * level of the pT level (or 0 if not found)
+        * number of abasics found
+    
     :rtype: tuple
-
+    
+    .. note::
+        It's important to pass **all** the channel data in, and not just the first few samples, as
+        we may not get an accurate measurement of the median current level otherwise.
+        
     """
-    # Find leader abasic peak, if present.
-    la_peak, la_pos, la_dur, la_events, _ = _find_abasic(events, events[:first_n], peak_threshold,
-                                                         mad_threshold, min_peak_dur)
+   
+    hp_peak, hp_pos, hp_dur, pt_level, hp_events =  _find_hairpin_double_abasic(events[first_n:],
+                                                                mad_threshold,
+                                                                min_peak_dur,
+                                                                min_pt_dur,
+                                                                pt_drop,
+                                                                max_pt_search_distance,
+                                                                use_first_abasic)
 
-    # Find hairpin abasic peak, if present.
-
-    # Ensure that we'll have enough events to have a non-zero number of template ones after we trim
-    # off the leader and hairpin buffers
-    if la_pos + la_events >= first_n - trim_gap:
-        first_n = la_pos + la_events + trim_gap + 1
-    hp_peak, hp_pos, hp_events, hp_dur, pt_level = 0.0, -1, 0, 0, 0.0
     abasics_found = 0
-    if la_pos != -1:
-        if double_abasic_hairpin:
-            hp_peak, hp_pos, hp_dur, pt_level, hp_events = \
-                _find_hairpin_double_abasic(events[first_n:],
-                                            peak_threshold,
-                                            mad_threshold,
-                                            da_min_peak_dur,
-                                            da_min_pt_dur,
-                                            pt_drop,
-                                            max_pt_search_distance)
-            if hp_pos != -1:
-                abasics_found = 2
-        else:  # Single-abasic splitting
-            hp_peak, hp_pos, hp_dur, hp_events, pt_level = _find_abasic(events[first_n:],
-                                                                        events[first_n:],
-                                                                        peak_threshold,
-                                                                        mad_threshold,
-                                                                        min_peak_dur,
-                                                                        min_pt_dur,
-                                                                        pt_window,
-                                                                        pt_drop, la_peak)
-            if hp_pos != -1:
-                abasics_found = 1
+    if hp_pos != -1:
+        abasics_found = 2
+        
     if hp_pos != -1:
         hp_pos += first_n
-    return (la_peak, la_pos + la_events, la_dur, hp_peak, hp_pos, hp_events, hp_dur, pt_level,
-            abasics_found)
+                
+    return (hp_peak, hp_pos, hp_events, hp_dur, pt_level, abasics_found)
 
 
-def _find_abasic_candidates(events, peak_threshold, mean_threshold, min_peak_dur,
-                            leader_peak_height=0, max_events_to_search=None):
+def _find_abasic_candidates(events, mean_threshold, min_peak_dur, leader_peak_height=0,
+                            max_events_to_search=None, peak_threshold=0):
     """Finds all the potential abasic candidates meeting the requirements.
 
     Because this is also used for leader abasic detection, there is the additional functionality to
@@ -272,12 +356,12 @@ def _find_abasic_candidates(events, peak_threshold, mean_threshold, min_peak_dur
         there is currently no reason we would want this.
 
     :param np.array events: events to check, possibly bounded by :param:`max_events_to_search`
-    :param peak_threshold: fraction of :param:`leader_peak_height` candidate abasics must reach.
     :param mean_threshold: minimum threshold event means must exceed to be part of a peak.
     :param min_peak_dur: minimum duration abasic candidates must have.
     :param leader_peak_height: height of the abasic in the leader.
     :param max_events_to_search: the maximum number of events to search for candidates. In the case
         where we're mid-abasic at the end of this window, we'll continue until the abasic ends.
+    :param peak_threshold: fraction of :param:`leader_peak_height` candidate abasics must reach (deprecating)
     :returns: abasic peak candidates in the form of (loc, num_events, height, duration).
     :rtype: array of tuples.
 
@@ -364,8 +448,8 @@ def _check_for_pT(candidate, events, min_pt_dur, pt_window, pt_max):
     return ()
 
 
-def _find_hairpin_double_abasic(events, peak_threshold, mad_threshold, min_peak_dur, min_pt_dur,
-                                pt_drop, max_pt_search_distance):
+def _find_hairpin_double_abasic(events, mad_threshold, min_peak_dur, min_pt_dur,
+                                pt_drop, max_pt_search_distance, use_first_abasic=False):
     """Find a double-abasic hairpin. This is slightly complicated by the possibility that the pT may
     or may not be present between the two abasics, due to the strand moving too fast. However, we're
     going to ignore that possibility for the moment, as we haven't got any evidence suggesting that
@@ -385,7 +469,6 @@ def _find_hairpin_double_abasic(events, peak_threshold, mad_threshold, min_peak_
        _find_abasic call.
 
     :param events: numpy record array of events.
-    :param peak_threshold: fraction of the leader abasic height the hairpin abasic must reach.
     :param mad_threshold: number or mads above the median the abasics must exceed.
     :param min_peak_dur: minimum duration of the abasics.
     :param min_pt_dur: minimum duration of the pT.
@@ -414,7 +497,7 @@ def _find_hairpin_double_abasic(events, peak_threshold, mad_threshold, min_peak_
     median, mad = med_mad(means)
     mean_threshold = mad_threshold * mad + median
 
-    abasics = _find_abasic_candidates(events, peak_threshold, mean_threshold, min_peak_dur)
+    abasics = _find_abasic_candidates(events, mean_threshold, min_peak_dur)
     candidates = []
     for index, abasic in enumerate(abasics):
         # We'll first check for a second abasic very soon after this one
@@ -444,11 +527,16 @@ def _find_hairpin_double_abasic(events, peak_threshold, mad_threshold, min_peak_
                 return abasic0[3] + abasic1[3]
             # We'll tie break on pT length, inverse pT height, abasic height, total abasic length
             # As a reminder, these tuples are: ((abasic0, abasic1), pt_dur, pt_events, pt_level)
-            best = max(candidates_with_polyT, key=lambda x: (x[1][0],
-                                                             -x[1][2],
-                                                             max(x[0][0][2],
-                                                                 x[0][1][2]),
-                                                             total_abasic_length(x[0][0], x[0][1])))
+            if use_first_abasic == True:
+                best = candidates_with_polyT[0]
+            else:
+                best = max(candidates_with_polyT,
+                           key=lambda x: (x[1][0],
+                                         -x[1][2],
+                                          max(x[0][0][2],
+                                              x[0][1][2]),
+                                          total_abasic_length(x[0][0], x[0][1])))
+
             max_peak = max(best[0][0][2], best[0][1][2])
             peak_loc = best[0][0][0]
             peak_dur = best[0][0][3] + best[0][1][3]
@@ -457,13 +545,12 @@ def _find_hairpin_double_abasic(events, peak_threshold, mad_threshold, min_peak_
     return max_peak, peak_loc, peak_dur, pt_level, hp_events
 
 
-def _find_abasic(all_events, events_to_search, peak_threshold, mad_threshold, min_peak_dur,
+def _find_abasic(all_events, events_to_search, mad_threshold, min_peak_dur,
                  min_pt_dur=None, pt_window=None, pt_drop=None, peak=0.0):
     """Find the best abasic, optionally with the requirement that it possesses a pT.
 
     :param all_events: numpy record array of all events, for use in threshold calculations.
     :param events_to_search: numpy record array of events to search for an abasic.
-    :param peak_threshold: fraction of the leader abasic height the hairpin abasic must reach.
     :param mad_threshold: number or mads above the median the abasics must exceed.
     :param min_peak_dur: minimum duration of candidate abasics.
     :param min_pt_dur: minimum duration of the pT.
@@ -491,7 +578,7 @@ def _find_abasic(all_events, events_to_search, peak_threshold, mad_threshold, mi
     median, mad = med_mad(all_events['mean'])
     mean_threshold = mad_threshold * mad + median
 
-    candidates = _find_abasic_candidates(all_events, peak_threshold, mean_threshold,
+    candidates = _find_abasic_candidates(all_events, mean_threshold,
                                          min_peak_dur, peak, len(events_to_search))
     if min_pt_dur is None and candidates:  # Not checking for polyT -- just use highest abasic
         # We'll break ties with peak length
