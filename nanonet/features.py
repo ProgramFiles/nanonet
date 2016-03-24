@@ -6,7 +6,7 @@ import numpy as np
 import numpy.lib.recfunctions as nprf
 
 from nanonet.fast5 import Fast5
-from nanonet.segment import segment_wrapper
+from nanonet.segment import segment
 from nanonet.eventdetection.filters import minknow_event_detect
 from nanonet.util import all_nmers
 
@@ -158,9 +158,9 @@ def make_basecall_input_multi(fast5_files, section='template', window=[-1, 0, 1]
                     window_lengths=[5, 10], thresholds=[2.0, 1.1],
                     peak_height=1.2
                 )
-                events = split_hairpin(events, section=section) 
+                events = segment(events, section=section) 
             else:
-                events, _ = segment_wrapper(fh, section=section)
+                events = fh.get_section_events(section)
             name = fh.filename_short
         try:
             X = events_to_features(events, window=window)

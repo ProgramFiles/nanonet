@@ -242,7 +242,7 @@ class Fast5(h5py.File):
             try:
                 reads = self[self.__raw_path__]
             except:
-                yield self.get_raw()[0]
+                raise KeyError('No raw data available in file {}.'.format(self.filename))
 
         if read_numbers is None:
             it = reads.keys()
