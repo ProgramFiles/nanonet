@@ -28,10 +28,15 @@ c_compile_args = [
 ]
 
 extensions = []
+
+eventdetect = os.path.join(os.path.dirname(__file__), 'nanonet', 'eventdetection')
+include_dirs=[eventdetect]
+if os.name == 'nt':
+    include_dirs.append(os.path.join(eventdetect, 'include'))
 extensions.append(Extension(
     'clib_filters',
-    sources=[os.path.join(os.path.dirname(__file__), 'nanonet', 'eventdetection', 'filters.c')],
-    include_dirs=[os.path.join(os.path.dirname(__file__), 'nanonet', 'eventdetection')],
+    sources=[os.path.join(eventdetect, 'filters.c')],
+    include_dirs=include_dirs,
     extra_compile_args=c_compile_args
 ))
 
