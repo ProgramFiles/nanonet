@@ -158,9 +158,9 @@ def make_basecall_input_multi(fast5_files, section='template', window=[-1, 0, 1]
                     window_lengths=[5, 10], thresholds=[2.0, 1.1],
                     peak_height=1.2
                 )
-                events, _ = segment(events, section=section) 
             else:
-                events = fh.get_section_events(section)
+                events = fh.get_read()
+            events, _ = segment(events, section=section) 
             name = fh.filename_short
         try:
             X = events_to_features(events, window=window)
