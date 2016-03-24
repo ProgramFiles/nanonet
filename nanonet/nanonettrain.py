@@ -42,9 +42,7 @@ def get_parser():
     parser.add_argument("--model", action=FileExist,
         default=pkg_resources.resource_filename('nanonet', 'data/default_model.tmpl'),
         help="ANN configuration file")
-    parser.add_argument("--n_features", type=int, default=None,
-        help="Network parameters for templated models.")
-    parser.add_argument("--kmer_length", type=int, default=None,
+    parser.add_argument("--kmer_length", type=int, default=5,
         help="Length of kmers to learn.")
     parser.add_argument("--bases", type=str, default='ACGT',
         help="Alphabet of kmers to learn.")
