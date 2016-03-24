@@ -20,9 +20,21 @@ mo = re.search(vsre, verstrline, re.M)
 if mo:
     version = mo.group(1)
 else:
-    raise RuntimeError('Unable to find version string in "dragonet/__init__.py".')
+    raise RuntimeError('Unable to find version string in "nanonet/__init__.py".')
     
+c_compile_args = [
+    '-Wall', '-DNDEBUG', '-std=c99',
+    '-fstrict-aliasing', '-O3', '-march=native'
+]
+
 extensions = []
+extensions.append(Extension(
+    'clib_filters',
+    sources=[os.path.join(os.path.dirname(__file__), 'nanonet', 'eventdetection', 'filters.c')],
+    include_dirs=[os.path.join(os.path.dirname(__file__), 'nanonet', 'eventdetection')],
+    extra_compile_args=c_compile_args
+))
+
 requires=[
     'h5py',
     'numpy',
