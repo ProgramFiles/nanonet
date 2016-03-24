@@ -5,6 +5,7 @@ extern "C" {
 #ifdef _WIN32
 #  ifdef MODULE_API_EXPORTS
 #    define MODULE_API __declspec(dllexport)
+#    define restrict __restrict
 #  else
 #    define MODULE_API __declspec(dllimport)
 #  endif

@@ -3,7 +3,19 @@
 
 #include <stdlib.h>
 #include <stdint.h>
-#include <stdbool.h>
+
+#if defined(_MSC_VER)
+#   define false   0
+#   define true    1
+#   define bool int
+#   define _Bool int
+#   define fmax max
+#   define fmin min
+#else
+#   include <stdbool.h>
+#endif
+
+
 
 typedef struct {
  int DEF_PEAK_POS;
@@ -19,7 +31,12 @@ typedef struct {
 } Detector;
 typedef Detector * DetectorPtr;
 
-void short_long_peak_detector(const DetectorPtr short_detect, const DetectorPtr long_detector, const double peak_height, size_t* restrict peaks);
+
+MODULE_API void short_long_peak_detector(
+  DetectorPtr short_detector,
+  DetectorPtr long_detector,
+  const double peak_height, 
+  size_t * peaks);
 
 
 #endif /* FILTERS_H */
