@@ -72,7 +72,6 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, *
 
     kwargs['window'] = network.meta['window']
 
-    name, features = make_basecall_input_multi((fast5,), **kwargs).next()
     try:
         name, features = make_basecall_input_multi((fast5,), **kwargs).next()
     except Exception as e:
