@@ -136,7 +136,16 @@ class Fast5(h5py.File):
         self.create_dataset(location, data=data, compression=True)
 
     def _add_event_table(self, data, location):
-        validate_event_table(data)
+        if not isinstance(data, np.ndarray):
+            raise TypeError('Table is not a ndarray.') 
+
+        req_fields = ['mean', 'stdv', 'start', 'length']
+        if not set(req_fields).issubset(data.dtype.names):
+            raise KeyError(
+                'Array does not contain fields for event array: {}, got {}.'.format(
+                    req_fields, data.dtype.names
+                )
+            )
         self._add_numpy_table(data, location)
 
     def _join_path(self, *args):

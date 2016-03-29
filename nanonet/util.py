@@ -6,6 +6,8 @@ from multiprocessing import Pool
 import random
 import string
 import math
+import numpy as np
+from numpy.lib import recfunctions as nprf
 
 __eta__ = 1e-100
 
@@ -38,6 +40,35 @@ def window(iterable, size):
         for each in iters[i:]:
             next(each, None)
     return izip(*iters)
+
+
+class AddFields(object):
+    """Helper to add numerous fields to a numpy array. (Syntactic
+    sugar around numpy.lib.recfunctions.append_fields)."""
+    def __init__(self, array):
+        self.array = array
+        self.data = []
+        self.fields = []
+        self.dtypes = []
+
+    def add(self, field, data, dtype=None):
+        """Add a field.
+
+        :param field: field name.
+        :param data: column of data.
+        :param dtype: dtype of data column.
+        """
+        if len(data) != len(self.array):
+            raise TypeError('Length of additional field must be equal to base array.')
+
+        if dtype is None:
+            dtype = data.dtype
+        self.fields.append(field)
+        self.data.append(data)
+        self.dtypes.append(dtype)
+
+    def finalize(self):
+        return nprf.append_fields(self.array, self.fields, self.data, self.dtypes, usemask=False)
 
 
 def docstring_parameter(*sub):
