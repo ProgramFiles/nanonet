@@ -58,7 +58,6 @@ class AddFields(object):
         :param data: column of data.
         :param dtype: dtype of data column.
         """
-        print len(data), len(self.array)
         if len(data) != len(self.array):
             raise TypeError('Length of additional field must be equal to base array.')
 
