@@ -10,17 +10,21 @@ import tempfile
 import timeit
 import subprocess
 import pkg_resources
-
+import itertools
 import numpy as np
 
 from nanonet import decoding, nn
 from nanonet.fast5 import Fast5, iterate_fast5
-from nanonet.util import random_string, conf_line, FastaWrite, tang_imap, all_nmers, kmers_to_sequence
+from nanonet.util import random_string, conf_line, FastaWrite, tang_imap, all_nmers, kmers_to_sequence, kmer_overlap, AddFields
 from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
 from nanonet.features import make_basecall_input_multi
 
 import warnings
 warnings.simplefilter("ignore")
+
+
+__fast5_analysis_name__ = 'Basecall_RNN_1D'
+__fast5_section_name__ = 'BaseCalled_{}'
 
 
 def get_parser():
@@ -36,6 +40,8 @@ def get_parser():
 
     parser.add_argument("--output", type=str,
         help="Output name, output will be in fasta format.")
+    parser.add_argument("--write_fast5", action=AutoBool, default=False,
+        help="Write datasets to .fast5.")
     parser.add_argument("--strand_list", default=None, action=FileExist,
         help="List of reads to process.")
     parser.add_argument("--limit", default=None, type=int,
@@ -57,7 +63,7 @@ def get_parser():
     return parser
 
 
-def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, **kwargs):
+def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, write_events=True, **kwargs):
     """Run neural network over a set of fast5 files
 
     :param modelfile: neural network specification.
@@ -73,7 +79,11 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, *
     kwargs['window'] = network.meta['window']
 
     try:
-        name, features = make_basecall_input_multi((fast5,), **kwargs).next()
+        it = make_basecall_input_multi((fast5,), **kwargs)
+        if write_events:
+            name, features, events = it.next()
+        else:
+            name, features, _ = it.next()
     except Exception as e:
         return None
     t2 = timeit.default_timer()
@@ -89,10 +99,12 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, *
     if kmers[-1] == 'X'*len(kmers[-1]):
         bad_kmer = post.shape[1] - 1
         max_call = np.argmax(post, axis=1)
-        post = post[max_call != bad_kmer]
+        good_events = (max_call != bad_kmer)
+        post = post[good_events]
         post = post[:, :-1]
 
-    post /= np.sum(post, axis=1).reshape((-1, 1))
+    weights = np.sum(post, axis=1).reshape((-1,1))
+    post /= weights
     if post_only:
         return post
 
@@ -105,6 +117,42 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, *
     seq = kmers_to_sequence(kmer_path)
     t4 = timeit.default_timer()
     decode_time = t4 -t3
+
+    # Write events table
+    if write_events:
+        adder = AddFields(events[good_events])
+        adder.add('model_state', kmer_path,
+            dtype='>S{}'.format(len(kmers[0])))
+        adder.add('p_model_state', np.fromiter(
+            (post[i,j] for i,j in itertools.izip(xrange(len(post)), states)),
+            dtype=float, count=len(post)))
+        adder.add('mp_model_state', np.fromiter(
+            (kmers[i] for i in np.argmax(post, axis=1)),
+            dtype='>S{}'.format(len(kmers[0])), count=len(post)))
+        adder.add('p_mp_model_state', np.max(post, axis=1))
+        adder.add('move', np.array(kmer_overlap(kmer_path)), dtype=int)
+
+        mid = len(kmers[0]) / 2
+        bases = set(''.join(kmers)) - set('X')
+        for base in bases:
+            cols = np.fromiter((k[mid] == base for k in kmers),
+                dtype=bool, count=len(kmers))
+            adder.add('p_{}'.format(base), np.sum(post[:, cols], axis=1), dtype=float)
+
+        events = adder.finalize()
+
+        with Fast5(fast5, 'a') as fh:
+           base = fh._join_path(
+               fh.get_analysis_new(__fast5_analysis_name__),
+               __fast5_section_name__.format(kwargs['section']))
+           fh._add_event_table(events, fh._join_path(base, 'Events'))
+           try:
+               name = fh.get_read(group=True).attrs['read_id']
+           except:
+               pass # filename inherited from above
+           fh._add_string_dataset(
+               '@{}\n{}\n+\n{}\n'.format(name, seq, '!'*len(seq)),
+               fh._join_path(base, 'Fastq'))
 
     return (name, seq, score, len(post), (feature_time, load_time, network_time, decode_time))
 

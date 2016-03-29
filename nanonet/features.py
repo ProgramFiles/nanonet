@@ -168,12 +168,13 @@ def make_basecall_input_multi(fast5_files, section='template', window=[-1, 0, 1]
             continue
         try:
             X = X[trim:-trim]
+            events = events[trim:-trim]
         except:
             continue
         else:
             if len(X) < min_len or len(X) > max_len:
                 continue
-        yield name, X
+        yield name, X, events
 
 
 def chunker(array, chunk_size):
