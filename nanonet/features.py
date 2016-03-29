@@ -6,7 +6,8 @@ import numpy as np
 import numpy.lib.recfunctions as nprf
 
 from nanonet.fast5 import Fast5
-from nanonet.segment import segment_wrapper
+from nanonet.segment import segment
+from nanonet.eventdetection.filters import minknow_event_detect
 from nanonet.util import all_nmers
 
 
@@ -141,7 +142,7 @@ def make_currennt_basecall_input_multi(fast5_files, netcdf_file, section='templa
     return reads_written
 
 
-def make_basecall_input_multi(fast5_files, section='template', window=[-1, 0, 1], trim=10, min_len=1000, max_len=9000):
+def make_basecall_input_multi(fast5_files, section='template', window=[-1, 0, 1], trim=10, min_len=1000, max_len=9000, event_detect=True):
     """Like the above, but doesn't yields directly events. The point here is to
     be fully consistent with the currennt interface but allow use of the python
     library
@@ -149,7 +150,17 @@ def make_basecall_input_multi(fast5_files, section='template', window=[-1, 0, 1]
     for f in fast5_files:
         filename = os.path.basename(f)
         with Fast5(f) as fh:
-            events, _ = segment_wrapper(fh, section=section)
+            if event_detect:
+                # These parameters make no sense to me, but hey-ho
+                # TODO: expose to user
+                events = minknow_event_detect(
+                    fh.get_read(raw=True), fh.sample_rate,
+                    window_lengths=[5, 10], thresholds=[2.0, 1.1],
+                    peak_height=1.2
+                )
+            else:
+                events = fh.get_read()
+            events, _ = segment(events, section=section) 
             name = fh.filename_short
         try:
             X = events_to_features(events, window=window)

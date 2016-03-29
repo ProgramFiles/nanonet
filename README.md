@@ -25,14 +25,17 @@ standard python mechanism on most platforms:
 
     python setup.py install
 
-The only required dependencies are numpy and h5py. Under Linux and OSX these
-will be downloaded and installed/compiled automatically. For Windows one
-can download and install the Microsoft Visual C++ Compiler for Python 2.7 from:
+The basecaller contains small amounts of C code for performing event detection.
+A C compiler is therefore required. Under Linux and OSX, one is likely
+installed already, for Windows one can download and install the Microsoft Visual
+C++ Compiler for Python 2.7 from:
 
     https://www.microsoft.com/en-gb/download/details.aspx?id=44266
 
-before executing the above. Alternatively Christophe Golke maintains a
-repository of compiled python wheels at:
+The only required dependencies are numpy and h5py. These will be download and
+installed/compiled automatically. Alternatively install them from your system's
+package repository. For Windows Christophe Golke maintains a repository of
+compiled python wheels at:
 
     http://www.lfd.uci.edu/~gohlke/pythonlibs/
 
@@ -59,26 +62,25 @@ command:
 
 will produced output along the following lines:
 
-    Processed 5 reads (24927 bases) in 20.6830949783s
-    Feature generation: 0.0864291191101
-    Load network: 0.0629456043243
-    Run network: 13.4354393482
-    Decoding: 7.09250092506
+    Basecalled 10 reads (47398 bases, 73150 events) in 161.7437057s (wall time)
+    Profiling
+    ---------
+    Feature generation: 4.5913898
+    Load network: 0.10911
+    Run network: 81.0764991 (0.579699426119 kb/s, 0.900384215036 kev/s)
+    Decoding: 74.1343571 (0.633984050561 kb/s, 0.984698631723 kev/s)
+    
 
 **Input files**
 
-nanonetcall is rather limited in its preprocessing of input data. It does not
-currently contain an event detection module and its heuristics for locating
-the hairpin within 2D reads are inflexible. Event detection for the current
-R9 developer release is performed in the cloud by Metirchor. It is advisable
-therefore to first pass reads through a Metrichor workflow to perform these tasks,
-giving nanonet as input the files which come back from Metrichor.
-
+nanonetcall operates from single-read .fast5 files as output by MinKnow. These
+should contain raw data; the event detection step and segmentation into template
+and complement sections will be performed by nanonet.
 
 **Using multiple CPUs**
 
 By default nanonetcall will use a maximum of one CPU. This can be altered
-through use of the `--decoding_jobs` option. In using this option be aware that
+through use of the `--jobs` option. In using this option be aware that
 higher numbers will lead to increased memory usage.
 
 
