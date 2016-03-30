@@ -13,7 +13,7 @@ def decode_profile(post, trans=None, log=False, slip=0.0):
     (profile)
     :param post: posterior probabilities of kmers by event.
     :param trans: A generator (e.g. a :class:`ndarray`) to produce
-    per-transition weights. None == no transition weights.
+    per-transition log-scaled weights. None == no transition weights.
     :param log: Posterior probabilities are in log-space.
     """
     nstate = post.shape[1]
