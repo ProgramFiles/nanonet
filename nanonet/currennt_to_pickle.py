@@ -115,7 +115,7 @@ if __name__ == '__main__':
         with open(args.input, 'r') as fh:
             in_network = json.load(fh)
     except:
-        sys.stderr.write('Failed to read from {}.\n')
+        sys.stderr.write('Failed to read from {}.\n'.format(args.input))
         exit(1)
 
     if not 'layers' in in_network:
