@@ -104,7 +104,8 @@ def network_to_numpy(in_network):
     meta = None
     if 'meta' in in_network:
         meta = in_network['meta']
-    network = nn.serial(layers, meta=meta)
+    network = nn.serial(layers)
+    network.meta = None
     return network
 
 
