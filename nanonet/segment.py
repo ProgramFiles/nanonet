@@ -10,12 +10,12 @@ __config__ = {
     'first_n'              :100,
     'min_events'           :200,
     'min_peak_dur'         :0.001,
-    'mad_threshold'        :3.0,
+    'mad_threshold'        :4.0,
     'peak_threshold'       :0.0,
     'min_pt_dur'           :0.15,
     'pt_window'            :0.5,
     'pt_drop'              :0.0,
-    'max_pt_search_len'    :3.0,
+    'max_pt_search_len'    :0.5,
     'da_min_peak_dur'      :0.005, #0.02
     'da_min_pt_dur'        :0.005, #0.0
     'abasic_range_backup'  :False,
