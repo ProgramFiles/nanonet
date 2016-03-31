@@ -32,7 +32,8 @@ C++ Compiler for Python 2.7 from:
 
     https://www.microsoft.com/en-gb/download/details.aspx?id=44266
 
-The only required dependencies are numpy and h5py. These will be download and
+The only required dependencies are h5py, numpy, and watchdog (used for watching
+a filesystem while reads are output from MinKNOW). These will be download and
 installed/compiled automatically. Alternatively install them from your system's
 package repository. For Windows Christophe Golke maintains a repository of
 compiled python wheels at:
