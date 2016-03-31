@@ -104,7 +104,8 @@ def network_to_numpy(in_network):
     meta = None
     if 'meta' in in_network:
         meta = in_network['meta']
-    network = nn.serial(layers, meta=meta)
+    network = nn.serial(layers)
+    network.meta = meta
     return network
 
 
@@ -115,7 +116,7 @@ if __name__ == '__main__':
         with open(args.input, 'r') as fh:
             in_network = json.load(fh)
     except:
-        sys.stderr.write('Failed to read from {}.\n')
+        sys.stderr.write('Failed to read from {}.\n'.format(args.input))
         exit(1)
 
     if not 'layers' in in_network:
