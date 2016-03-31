@@ -9,15 +9,15 @@ __config__ = {
     'trim_end'             :0,
     'first_n'              :100,
     'min_events'           :200,
-    'min_peak_dur'         :0.001,
-    'mad_threshold'        :4.0,
+    'min_peak_dur'         :0.0,
+    'mad_threshold'        :3.5,
     'peak_threshold'       :0.0,
     'min_pt_dur'           :0.15,
     'pt_window'            :0.5,
     'pt_drop'              :0.0,
     'max_pt_search_len'    :0.5,
-    'da_min_peak_dur'      :0.005, #0.02
-    'da_min_pt_dur'        :0.005, #0.0
+    'da_min_peak_dur'      :0.001, #0.02
+    'da_min_pt_dur'        :0.00, #0.0
     'abasic_range_backup'  :False,
     'use_first_abasic'     :True,
 }
@@ -499,7 +499,17 @@ def _find_hairpin_double_abasic(events, mad_threshold, min_peak_dur, min_pt_dur,
 
     abasics = _find_abasic_candidates(events, mean_threshold, min_peak_dur)
     candidates = []
+    print "found", len(abasics), "abasics"
+    #from matplotlib import pyplot as plt
+    #plt.plot(events['start'], events['mean'], drawstyle='steps-post')
+    #for index, abasic in enumerate(abasics):
+    #   plt.axvline(events[abasic[0]]['start'])
+    #plt.show()
+
+
     for index, abasic in enumerate(abasics):
+        print index, events[abasic[0]]['start'] - events['start'][0]
+
         # We'll first check for a second abasic very soon after this one
         # Recall each of these abasics is (abasic_event_index, num_events_in_abasic, ...)
         peak_end = events[abasic[0] + abasic[1]]['start']  # i.e. the start of the next event
@@ -511,6 +521,7 @@ def _find_hairpin_double_abasic(events, mad_threshold, min_peak_dur, min_pt_dur,
             next_abasic_index += 1
         # elif abasic[1] >= 1.5 * min_peak_len:  # Check for an extra-long abasic
         #     candidates.add(('long-abasic', index, abasic))
+    print "found", len(candidates), "candidates"
     if candidates:
         candidates_with_polyT = []
         pt_max = median - 1.4826 * mad * pt_drop  # 1.4826 * mad is approximately 1 stdv.
@@ -520,6 +531,7 @@ def _find_hairpin_double_abasic(events, mad_threshold, min_peak_dur, min_pt_dur,
             pT_test = _check_for_pT(candidate[0], events, min_pt_dur, time_between_abasics, pt_max)
             if pT_test:
                 candidates_with_polyT.append((candidate, pT_test))
+        print "found", len(candidates_with_polyT), "candidates"
         if candidates_with_polyT:
             def total_abasic_length(abasic0, abasic1):
                 # These are abasics from _find_abasic_candidates()
