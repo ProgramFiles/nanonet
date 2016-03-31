@@ -15,7 +15,7 @@ import numpy as np
 
 from nanonet import decoding, nn
 from nanonet.fast5 import Fast5, iterate_fast5
-from nanonet.util import random_string, conf_line, FastaWrite, tang_imap, all_nmers, kmers_to_sequence, kmer_overlap, AddFields
+from nanonet.util import random_string, conf_line, Fast5Watcher, FastaWrite, tang_imap, all_nmers, kmers_to_sequence, kmer_overlap, AddFields
 from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
 from nanonet.features import make_basecall_input_multi
 
@@ -34,7 +34,9 @@ def get_parser():
     )
     
     parser.add_argument("input", action=FileExist,
-        help="A path to fast5 files or a single netcdf file.")
+        help="A path to fast5 files.")
+    parser.add_argument("--watch", default=None, type=int,
+        help="Switch to watching folder, argument value used as timeout period.")
     parser.add_argument("--section", default=None, choices=('template', 'complement'),
         help="Section of read for which to produce basecalls, will override that stored in model file.")
 
@@ -179,12 +181,18 @@ def main():
         'section':args.section
     }
 
+
+    #TODO: handle case where there are pre-existing files.
+    if args.watch is not None:
+        fast5_files = Fast5Watcher(args.input, timeout=args.watch)
+    else:
+        fast5_files = iterate_fast5(args.input, paths=True, strand_list=args.strand_list, limit=args.limit)
+
     t0 = timeit.default_timer()
     n_reads = 0
     n_bases = 0
     n_events = 0
     timings = [0.0, 0.0, 0.0, 0.0]
-    fast5_files = iterate_fast5(args.input, paths=True, strand_list=args.strand_list, limit=args.limit)
     with FastaWrite(args.output) as fasta:
         for result in tang_imap(process_read, fast5_files, fix_args=fix_args, fix_kwargs=fix_kwargs, threads=args.jobs):
             if result is None:
