@@ -45,7 +45,8 @@ requires=[
     'numpy',
 ]
 extra_requires = {
-    'currennt': ['netCDF4']
+    'currennt': ['netCDF4'],
+    'watcher': ['watchdog'],
 }
 
 setup(

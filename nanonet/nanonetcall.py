@@ -15,7 +15,7 @@ import numpy as np
 
 from nanonet import decoding, nn
 from nanonet.fast5 import Fast5, iterate_fast5
-from nanonet.util import random_string, conf_line, Fast5Watcher, FastaWrite, tang_imap, all_nmers, kmers_to_sequence, kmer_overlap, AddFields
+from nanonet.util import random_string, conf_line, FastaWrite, tang_imap, all_nmers, kmers_to_sequence, kmer_overlap, AddFields
 from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
 from nanonet.features import make_basecall_input_multi
 
@@ -185,6 +185,8 @@ def main():
 
     #TODO: handle case where there are pre-existing files.
     if args.watch is not None:
+        # An optional component
+        from nanonet.watcher import Fast5Watcher
         fast5_files = Fast5Watcher(args.input, timeout=args.watch)
     else:
         fast5_files = iterate_fast5(args.input, paths=True, strand_list=args.strand_list, limit=args.limit)

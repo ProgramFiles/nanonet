@@ -43,6 +43,16 @@ compiled python wheels at:
 See the full installation instructions for further details where instructions
 to perform a binary installation under Ubuntu can also be found.
 
+**Optional Components**
+Nanonet contains an optional component to watch a filesystem for read files as
+they are produced by MinKnow. This feature is not installed by default. To
+install it run
+
+    pip install -e .[watcher]
+
+from the source directory. This will allow use of the `--watch` option of the
+basecaller.
+
 
 Peforming basecalling
 ---------------------
@@ -71,6 +81,15 @@ will produced output along the following lines:
     Run network: 81.0764991 (0.579699426119 kb/s, 0.900384215036 kev/s)
     Decoding: 74.1343571 (0.633984050561 kb/s, 0.984698631723 kev/s)
     
+**Filesystem watching**
+Nanonet has the ability to watch a filesystem as reads are produced. This
+behaviour is enabled with the `--watch` option:
+
+    nanonetcall input_folder --watch 600 > basecalls.fa
+
+where the option value is a timeout in seconds, when no new reads are seen for
+this time nanonetcall will exit.
+
 
 **Input files**
 
