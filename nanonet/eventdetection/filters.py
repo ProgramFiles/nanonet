@@ -7,11 +7,11 @@ from ctypes import cdll, c_double, c_bool, c_size_t, c_int, Structure, POINTER
 
 try:
     # after 'python setup.py install' we should be able to do this
-    import clib_filters
+    import clib_nanonetfilters
 except:
     try:
         # after 'python setup.py develop' this should work
-        lib_file = imp.find_module('clib_filters')[1]
+        lib_file = imp.find_module('clib_nanonetfilters')[1]
     except Exception as e:
         raise ImportError('Cannot locate C library for event detection.')
     else:

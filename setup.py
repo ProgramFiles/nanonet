@@ -34,7 +34,7 @@ include_dirs=[eventdetect]
 if os.name == 'nt':
     include_dirs.append(os.path.join(eventdetect, 'include'))
 extensions.append(Extension(
-    'clib_filters',
+    'clib_nanonetfilters',
     sources=[os.path.join(eventdetect, 'filters.c')],
     include_dirs=include_dirs,
     extra_compile_args=c_compile_args

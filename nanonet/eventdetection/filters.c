@@ -23,7 +23,7 @@
  * arrrays anyway. Note, the function name after "init" is tied
  * to the Extension name in setup.py
 **/
-void initclib_filters() {}
+void initclib_nanonetfilters() {}
 
 
 /**
