@@ -25,6 +25,7 @@ warnings.simplefilter("ignore")
 
 __fast5_analysis_name__ = 'Basecall_RNN_1D'
 __fast5_section_name__ = 'BaseCalled_{}'
+__ETA__ = 1e-300
 
 
 def get_parser():
@@ -110,7 +111,7 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, w
 
     post = min_prob + (1.0 - min_prob) * post
     trans = decoding.estimate_transitions(post, trans=trans)
-    score, states = decoding.decode_profile(post, trans=trans, log=False)
+    score, states = decoding.decode_profile(post, trans=np.log(__ETA__ + trans), log=False)
 
     # Form basecall
     kmer_path = [kmers[i] for i in states]
