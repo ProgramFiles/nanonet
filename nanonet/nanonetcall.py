@@ -40,6 +40,8 @@ def get_parser():
         help="Switch to watching folder, argument value used as timeout period.")
     parser.add_argument("--section", default=None, choices=('template', 'complement'),
         help="Section of read for which to produce basecalls, will override that stored in model file.")
+    parser.add_argument("--event_detect", default=True, action=AutoBool,
+        help="Perform event detection, else use existing event data")
 
     parser.add_argument("--output", type=str,
         help="Output name, output will be in fasta format.")
@@ -179,7 +181,8 @@ def main():
     fix_kwargs = {
         'min_len':args.min_len,
         'max_len':args.max_len,
-        'section':args.section
+        'section':args.section,
+        'event_detect':args.event_detect
     }
 
 
