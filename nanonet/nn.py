@@ -3,8 +3,25 @@ import numpy as np
 def tanh(x):
     return np.tanh(x)
 
+def tanh_pade(x):
+    """ Pade approximation of tanh function
+    http://musicdsp.org/archive.php?classid=5#238
+    """
+    xsqr = np.square(x)
+    tanh_p = (27.0 + xsqr) / (27.0 + 9.0 * xsqr)
+    return np.clip(tanh_p, -3.0, 3.0)
+
 def sigmoid(x):
     return np.reciprocal(1.0 + np.exp(-x))
+
+def sigmoid_app(x):
+   """ Approximation of sigmoid function
+   https://github.com/Theano/Theano/blob/master/theano/tensor/nnet/sigm.py#L217
+   """
+   xabs = np.fabs(x)
+   tmp = np.where(xabs < 3.0, 0.4677045353015495 + 0.02294064733985825 * (xabs - 1.7), 0.497527376843365)
+   tmp = np.where(xabs < 1.7, 0.75 * xabs / (1.0 + xabs), tmp)
+   return np.sign(x) * tmp + 0.5
 
 def linear(x):
     return x
@@ -20,7 +37,7 @@ def relu(x):
 tang_nn_type = np.float64
 
 class layer:
-    """  Basic feedforward layer  
+    """  Basic feedforward layer
          out = f( inMat W + b )
 
     :param W: Weight matrix of dimension (|input|, size)
@@ -46,8 +63,8 @@ class layer:
 class softmax:
     """  Softmax layer
          tmp = exp( inmat W + b )
-         out = row_normalise( tmp ) 
- 
+         out = row_normalise( tmp )
+
     :param W: Weight matrix of dimension (|input|, size)
     :param b: Bias vector of length size.  Optional with default of no bias.
     """
@@ -114,7 +131,7 @@ class lstm_layer:
             state_new = state_old * Pforget + Update * Pupdate
             Poutput = sigmoid( v W3 + b3 + state * p2)
             output_new = tanh(state) * Poutput
-        
+
 
         :param iW: weights for cells taking input from preceeding layer.
         Size (4, -1, size)
@@ -225,4 +242,3 @@ def birnn(layer1, layer2):
     """  Creates a bidirectional RNN from two RNNs
     """
     return parallel([layer1, reverse(layer2)])
-
