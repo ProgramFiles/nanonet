@@ -152,8 +152,9 @@ class lstm_layer:
             p = np.zeros((3, size), dtype=tang_nn_type)
         assert p.shape == (3, size)
 
-        self.W = np.ascontiguousarray(np.concatenate((iW, lW), axis=1))
-        self.b = np.ascontiguousarray(b)
+        self.iW = np.ascontiguousarray(iW.transpose((1,0,2)).reshape((-1, 4 * size)))
+        self.lW = np.ascontiguousarray(lW.transpose((1,0,2)).reshape((size, 4 * size)))
+        self.b = np.ascontiguousarray(b).reshape(-1)
         self.p = np.ascontiguousarray(p)
         self.isize = iW.shape[1]
 
@@ -171,12 +172,15 @@ class lstm_layer:
         out_prev = np.zeros(self.out_size(), dtype=tang_nn_type)
 
         for i, v in enumerate(inMat):
-            v2 = np.concatenate((v, out_prev))
+            vW = v.dot(self.iW)
+            outW = out_prev.dot(self.lW)
+            sumW = vW + outW  + self.b
+            sumW = sumW.reshape((4, self.size))
             #  Forget gate activation
-            state *= sigmoid( v2.dot(self.W[2]) + self.b[2] + state * self.p[1] )
-            state += tanh(v2.dot(self.W[0]) + self.b[0]) * sigmoid( v2.dot(self.W[1]) + self.b[1] + state * self.p[0])
+            state *= sigmoid(sumW[2] + state * self.p[1] )
+            state += tanh(sumW[0]) * sigmoid(sumW[1] + state * self.p[0])
             #  Output gate activation
-            out[i] = tanh(state) * sigmoid(v2.dot(self.W[3]) + self.b[3]  + state * self.p[2])
+            out[i] = tanh(state) * sigmoid(sumW[3]  + state * self.p[2])
             out_prev = out[i]
         return out
 
