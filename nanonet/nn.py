@@ -3,7 +3,7 @@ import numpy as np
 def tanh(x):
     return np.tanh(x)
 
-def tanh_pade(x):
+def tanh_approx(x):
     """ Pade approximation of tanh function
     http://musicdsp.org/archive.php?classid=5#238
     """
@@ -14,7 +14,7 @@ def tanh_pade(x):
 def sigmoid(x):
     return np.reciprocal(1.0 + np.exp(-x))
 
-def sigmoid_app(x):
+def sigmoid_approx(x):
    """ Approximation of sigmoid function
    https://github.com/Theano/Theano/blob/master/theano/tensor/nnet/sigm.py#L217
    """
