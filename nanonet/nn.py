@@ -8,7 +8,7 @@ def tanh_pade(x):
     http://musicdsp.org/archive.php?classid=5#238
     """
     xsqr = np.square(x)
-    tanh_p = (27.0 + xsqr) / (27.0 + 9.0 * xsqr)
+    tanh_p = x * (27.0 + xsqr) / (27.0 + 9.0 * xsqr)
     return np.clip(tanh_p, -3.0, 3.0)
 
 def sigmoid(x):
