@@ -75,3 +75,39 @@ class ANNTest(unittest.TestCase):
         res = network.run(self.x)
         res_sum = res.sum(axis=1)
         self.assertTrue(np.allclose(res_sum, 1.0))
+
+    def test_007_rnn_no_state(self):
+        W1 = np.vstack((np.zeros((self._SIZE, self._SIZE)), self.W))
+        network = nn.rnn_layer(W1, b=self.b, fun=nn.linear)
+
+        res = network.run(self.x)
+        np.testing.assert_almost_equal(res, self.res)
+
+    def test_008_rnn_no_input(self):
+        W1 = np.random.normal(size=(self._SIZE, self._SIZE))
+        W2 = np.vstack((W1, np.zeros((self._NFEATURES, self._SIZE))))
+        network = nn.rnn_layer(W2, fun=nn.linear)
+
+        res = network.run(self.x)
+        np.testing.assert_almost_equal(res, 0.0)
+
+    def test_009_rnn_no_input_with_bias(self):
+        W1 = np.random.normal(size=(self._SIZE, self._SIZE))
+        W2 = np.vstack((W1, np.zeros((self._NFEATURES, self._SIZE))))
+        network = nn.rnn_layer(W2, b=self.b, fun=nn.linear)
+
+        res = network.run(self.x)
+        res2 = np.zeros(self._SIZE)
+        for i in xrange(self._NSTEP):
+            res2 = res2.dot(W1) + self.b
+            np.testing.assert_almost_equal(res[i], res2)
+
+    def test_010_birnn_no_input_with_bias(self):
+        W1 = np.random.normal(size=(self._SIZE, self._SIZE))
+        W2 = np.vstack((W1, np.zeros((self._NFEATURES, self._SIZE))))
+        layer1 = nn.rnn_layer(W2, b=self.b)
+        layer2 = nn.rnn_layer(W2, b=self.b)
+        network = nn.birnn(layer1, layer2)
+
+        res = network.run(self.x)
+        np.testing.assert_almost_equal(res[:,:self._SIZE], res[::-1,self._SIZE:])

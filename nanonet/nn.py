@@ -97,9 +97,12 @@ class rnn_layer:
     :param b: Bias vector of length  size.  Optional with default of no bias.
     :param fun: The activation function.  Must accept a numpy array as input.
     """
-    def __init__(self, W, fun=tanh):
+    def __init__(self, W, b=None, fun=tanh):
         assert W.shape[0] > W.shape[1]
+        assert b is None or len(b) == W.shape[1]
+        self.b = np.zeros(W.shape[1], dtype=tang_nn_type) if b is None else b
         self.W = W
+
         self.fun = fun
         self.size = W.shape[0] - W.shape[1]
 
@@ -112,10 +115,11 @@ class rnn_layer:
     def run(self, inMat):
         assert self.in_size() == inMat.shape[1]
         out = np.zeros((inMat.shape[0], self.out_size()), dtype=tang_nn_type)
-        state = np.zeros(self.size, dtype=tang_nn_type)
+        state = np.zeros(self.out_size(), dtype=tang_nn_type)
         for i, v in enumerate(inMat):
-            state = self.fun(np.concatenate((state, v)).dot(self.W))
+            state = self.fun(np.concatenate((state, v)).dot(self.W) + self.b)
             out[i] = state
+        return out
 
 class lstm_layer:
     def __init__(self, iW, lW, b=None, p=None):
