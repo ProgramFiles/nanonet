@@ -3,8 +3,25 @@ import numpy as np
 def tanh(x):
     return np.tanh(x)
 
+def tanh_pade(x):
+    """ Pade approximation of tanh function
+    http://musicdsp.org/archive.php?classid=5#238
+    """
+    xsqr = np.square(x)
+    tanh_p = x * (27.0 + xsqr) / (27.0 + 9.0 * xsqr)
+    return np.clip(tanh_p, -1.0, 1.0)
+
 def sigmoid(x):
     return np.reciprocal(1.0 + np.exp(-x))
+
+def sigmoid_app(x):
+   """ Approximation of sigmoid function
+   https://github.com/Theano/Theano/blob/master/theano/tensor/nnet/sigm.py#L217
+   """
+   xabs = np.fabs(x)
+   tmp = np.where(xabs < 3.0, 0.4677045353015495 + 0.02294064733985825 * (xabs - 1.7), 0.497527376843365)
+   tmp = np.where(xabs < 1.7, 0.75 * xabs / (1.0 + xabs), tmp)
+   return np.sign(x) * tmp + 0.5
 
 def linear(x):
     return x
@@ -20,7 +37,7 @@ def relu(x):
 tang_nn_type = np.float64
 
 class layer:
-    """  Basic feedforward layer  
+    """  Basic feedforward layer
          out = f( inMat W + b )
 
     :param W: Weight matrix of dimension (|input|, size)
@@ -46,8 +63,8 @@ class layer:
 class softmax:
     """  Softmax layer
          tmp = exp( inmat W + b )
-         out = row_normalise( tmp ) 
- 
+         out = row_normalise( tmp )
+
     :param W: Weight matrix of dimension (|input|, size)
     :param b: Bias vector of length size.  Optional with default of no bias.
     """
@@ -114,7 +131,7 @@ class lstm_layer:
             state_new = state_old * Pforget + Update * Pupdate
             Poutput = sigmoid( v W3 + b3 + state * p2)
             output_new = tanh(state) * Poutput
-        
+
 
         :param iW: weights for cells taking input from preceeding layer.
         Size (4, -1, size)
@@ -135,8 +152,9 @@ class lstm_layer:
             p = np.zeros((3, size), dtype=tang_nn_type)
         assert p.shape == (3, size)
 
-        self.W = np.ascontiguousarray(np.concatenate((iW, lW), axis=1))
-        self.b = np.ascontiguousarray(b)
+        self.iW = np.ascontiguousarray(iW.transpose((1,0,2)).reshape((-1, 4 * size)))
+        self.lW = np.ascontiguousarray(lW.transpose((1,0,2)).reshape((size, 4 * size)))
+        self.b = np.ascontiguousarray(b).reshape(-1)
         self.p = np.ascontiguousarray(p)
         self.isize = iW.shape[1]
 
@@ -154,12 +172,15 @@ class lstm_layer:
         out_prev = np.zeros(self.out_size(), dtype=tang_nn_type)
 
         for i, v in enumerate(inMat):
-            v2 = np.concatenate((v, out_prev))
+            vW = v.dot(self.iW)
+            outW = out_prev.dot(self.lW)
+            sumW = vW + outW  + self.b
+            sumW = sumW.reshape((4, self.size))
             #  Forget gate activation
-            state *= sigmoid( v2.dot(self.W[2]) + self.b[2] + state * self.p[1] )
-            state += tanh(v2.dot(self.W[0]) + self.b[0]) * sigmoid( v2.dot(self.W[1]) + self.b[1] + state * self.p[0])
+            state *= sigmoid(sumW[2] + state * self.p[1] )
+            state += tanh(sumW[0]) * sigmoid(sumW[1] + state * self.p[0])
             #  Output gate activation
-            out[i] = tanh(state) * sigmoid(v2.dot(self.W[3]) + self.b[3]  + state * self.p[2])
+            out[i] = tanh(state) * sigmoid(sumW[3]  + state * self.p[2])
             out_prev = out[i]
         return out
 
@@ -225,4 +246,3 @@ def birnn(layer1, layer2):
     """  Creates a bidirectional RNN from two RNNs
     """
     return parallel([layer1, reverse(layer2)])
-
