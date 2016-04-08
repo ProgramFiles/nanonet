@@ -54,7 +54,61 @@ class layer:
 
     def run(self, inMat):
         assert self.in_size() == inMat.shape[1]
-        return self.f(inMat.dot(self.W) + self.b)
+        if use_opencl == True:
+            # Init OpenCL (does it once)
+            init_opencl()
+            global ctx
+            global queue
+            
+            fp_type = np.float32 # uses this floating point type in the kernel
+            kernel_src = kernel_code_feedforward
+            
+            # Calculate work items 
+            local_x = 256
+            local_y = 1
+            global_x = inMat.shape[0]
+            if global_x % local_x:
+                global_x = (global_x / local_x + 1) * local_x 
+            global_y = 1
+            
+            # Build the kernel (builds for the first time, then uses cached version)
+            opencl_fptype = "double"
+            opencl_fptype_suffix = ""
+            if fp_type == np.float32:
+                opencl_fptype = "float"
+                opencl_fptype_suffix = "f"
+            opencl_fptype_define = "-DFPTYPE="+opencl_fptype+" -DF="+opencl_fptype_suffix
+            prg = cl.Program(ctx, kernel_src).build("-I. -Werror " + opencl_fptype_define + " -DWORK_ITEMS="+str(local_x)+" -DIN_MAT_Y="+str(inMat.shape[1]))
+            
+            inMatc = inMat
+            Wc = np.transpose(self.W)
+            bc = self.b
+            # Convert arrays if the types are different
+            if tang_nn_type != fp_type:
+                inMatc = inMat.astype(np.float32)
+                Wc = Wc.astype(np.float32)
+                bc = self.b.astype(np.float32)
+            
+            # Allocate OpenCL buffers    
+            cl_inMat = cl.Buffer(ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR, hostbuf=np.ravel(inMatc))
+            cl_W = cl.Buffer(ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR, hostbuf=np.ravel(Wc))
+            cl_b = cl.Buffer(ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR, hostbuf=np.ravel(bc))
+            cl_out = cl.Buffer(ctx, cl.mem_flags.WRITE_ONLY, inMat.shape[0]*self.W.shape[1]*inMatc.itemsize)
+
+            # Run the kernel
+            prg.run_layer(queue, (global_x, global_y), (local_x, local_y), np.int32(inMat.shape[0]), np.int32(Wc.shape[0]), cl_inMat, cl_W, cl_b, cl_out)
+            
+            # Copy results back to host (blocking call)
+            outRavel = np.zeros(inMat.shape[0]*self.W.shape[1], dtype=np.float64)
+            if tang_nn_type != fp_type:
+                outRavel32 = np.zeros(outRavel.size, dtype=np.float32)
+                cl.enqueue_copy(queue, outRavel32, cl_out)
+                outRavel[:] = outRavel32[:]
+            else:
+                cl.enqueue_copy(queue, outRavel, cl_out)
+            return np.copy(np.reshape(outRavel, (inMat.shape[0], self.W.shape[1])))
+        else:
+            return self.f(inMat.dot(self.W) + self.b)
 
 class softmax:
     """  Softmax layer
@@ -288,6 +342,38 @@ def birnn(layer1, layer2):
     """  Creates a bidirectional RNN from two RNNs
     """
     return parallel([layer1, reverse(layer2)])
+
+kernel_code_feedforward = """
+#if __OPENCL_VERSION__ <= CL_VERSION_1_1
+#pragma OPENCL EXTENSION cl_khr_fp64: enable
+#endif
+
+__kernel __attribute__((reqd_work_group_size(WORK_ITEMS, 1, 1)))
+__kernel void run_layer(
+    int inMatx,
+    int Wx, 
+    __global const FPTYPE* restrict inMat, 
+    __global const FPTYPE* restrict W, 
+    __global const FPTYPE* restrict b, 
+    __global FPTYPE* restrict ret
+){
+    int id = get_global_id(0);
+    if(id < inMatx)
+    {
+        FPTYPE inMatBuffer[IN_MAT_Y];
+        for(int z = 0; z < IN_MAT_Y; ++z)
+            inMatBuffer[z] = inMat[id*IN_MAT_Y+z];
+        
+        for(int y = 0; y < Wx; ++y)
+        {
+            FPTYPE r = 0.0F;
+            for(int z = 0; z < IN_MAT_Y; ++z)
+                r += inMatBuffer[z] * W[y*IN_MAT_Y+z];
+            ret[id*Wx+y] = tanh(r + b[y]);
+        }
+    }
+}
+"""
 
 kernel_code_lstm = """
 #if __OPENCL_VERSION__ <= CL_VERSION_1_1
