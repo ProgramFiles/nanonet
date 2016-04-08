@@ -1,3 +1,4 @@
+import abc
 import numpy as np
 
 def tanh(x):
@@ -34,9 +35,29 @@ def relu(x):
 
 """  Convention: inMat row major (C ordering) as (time, state)
 """
-tang_nn_type = np.float64
+dtype = np.float64
 
-class layer:
+class Layer(object):
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def run(self, inMat):
+        """  Run network layer
+        """
+        return
+
+class RNN(Layer):
+
+    @abc.abstractmethod
+    def step(self, in_vec, state):
+        """ A single step along the RNN
+        :param in_vec: Input to node
+        :param state: Hidden state from previous node
+        """
+        return
+
+
+class feedforward(Layer):
     """  Basic feedforward layer
          out = f( inMat W + b )
 
@@ -46,7 +67,7 @@ class layer:
     """
     def __init__(self, W, b=None, fun=tanh):
         assert b is None or len(b) == W.shape[1]
-        self.b = np.zeros(W.shape[1], dtype=tang_nn_type) if b is None else b
+        self.b = np.zeros(W.shape[1], dtype=dtype) if b is None else b
         self.W = W
         self.f = fun
 
@@ -60,7 +81,7 @@ class layer:
         assert self.in_size() == inMat.shape[1]
         return self.f(inMat.dot(self.W) + self.b)
 
-class softmax:
+class softmax(Layer):
     """  Softmax layer
          tmp = exp( inmat W + b )
          out = row_normalise( tmp )
@@ -70,7 +91,7 @@ class softmax:
     """
     def __init__(self, W, b=None):
         assert b is None or len(b) == W.shape[1]
-        self.b = np.zeros(W.shape[1], dtype=tang_nn_type) if b is None else b
+        self.b = np.zeros(W.shape[1], dtype=dtype) if b is None else b
         self.W = W
 
     def in_size(self):
@@ -88,7 +109,7 @@ class softmax:
         tmp /= x.reshape((-1,1))
         return tmp
 
-class rnn_layer:
+class rnn(RNN):
     """ A simple recurrent layer
         Step:  state_new = fun( [state_old, input_new] W + b )
                output_new = state_new
@@ -100,7 +121,7 @@ class rnn_layer:
     def __init__(self, W, b=None, fun=tanh):
         assert W.shape[0] > W.shape[1]
         assert b is None or len(b) == W.shape[1]
-        self.b = np.zeros(W.shape[1], dtype=tang_nn_type) if b is None else b
+        self.b = np.zeros(W.shape[1], dtype=dtype) if b is None else b
         self.W = W
 
         self.fun = fun
@@ -112,16 +133,20 @@ class rnn_layer:
     def out_size(self):
         return self.W.shape[1]
 
+    def step(self, in_vec, state):
+        state_out = self.fun(np.concatenate((state, in_vec)).dot(self.W) + self.b)
+        return state_out
+
     def run(self, inMat):
         assert self.in_size() == inMat.shape[1]
-        out = np.zeros((inMat.shape[0], self.out_size()), dtype=tang_nn_type)
-        state = np.zeros(self.out_size(), dtype=tang_nn_type)
+        out = np.zeros((inMat.shape[0], self.out_size()), dtype=dtype)
+        state = np.zeros(self.out_size(), dtype=dtype)
         for i, v in enumerate(inMat):
-            state = self.fun(np.concatenate((state, v)).dot(self.W) + self.b)
+            state = self.step(v, state)
             out[i] = state
         return out
 
-class lstm_layer:
+class lstm(RNN):
     def __init__(self, iW, lW, b=None, p=None):
         """ LSTM layer with peepholes.  Implementation is to be consistent with
         Currennt and may differ from other descriptions of LSTM networks (e.g.
@@ -150,10 +175,10 @@ class lstm_layer:
         size = self.size = iW.shape[2]
         assert lW.shape == (4, size, size)
         if b is None:
-            b = np.zeros((4, size), dtype=tang_nn_type)
+            b = np.zeros((4, size), dtype=dtype)
         assert b.shape == (4, size)
         if p is None:
-            p = np.zeros((3, size), dtype=tang_nn_type)
+            p = np.zeros((3, size), dtype=dtype)
         assert p.shape == (3, size)
 
         self.iW = np.ascontiguousarray(iW.transpose((1,0,2)).reshape((-1, 4 * size)))
@@ -168,27 +193,35 @@ class lstm_layer:
     def out_size(self):
         return self.size
 
+    def step(self, in_vec, in_state):
+        vW = in_vec.dot(self.iW)
+        out_prev = in_state[:self.size]
+        state = in_state[self.size:]
+        outW = out_prev.dot(self.lW)
+        sumW = vW + outW  + self.b
+        sumW = sumW.reshape((4, self.size))
+
+        #  Forget gate activation
+        state *= sigmoid(sumW[2] + state * self.p[1] )
+        #  Update state with input
+        state += tanh(sumW[0]) * sigmoid(sumW[1] + state * self.p[0])
+        #  Output gate activation
+        out = tanh(state) * sigmoid(sumW[3]  + state * self.p[2])
+        return np.concatenate((out, state))
+
+
     def run(self, inMat):
         assert self.in_size() == inMat.shape[1]
 
-        out = np.zeros((inMat.shape[0], self.out_size()), dtype=tang_nn_type)
-        state = np.zeros(self.out_size(), dtype=tang_nn_type)
-        out_prev = np.zeros(self.out_size(), dtype=tang_nn_type)
+        out = np.zeros((inMat.shape[0], self.out_size()), dtype=dtype)
+        state = np.zeros(2 * self.out_size(), dtype=dtype)
 
         for i, v in enumerate(inMat):
-            vW = v.dot(self.iW)
-            outW = out_prev.dot(self.lW)
-            sumW = vW + outW  + self.b
-            sumW = sumW.reshape((4, self.size))
-            #  Forget gate activation
-            state *= sigmoid(sumW[2] + state * self.p[1] )
-            state += tanh(sumW[0]) * sigmoid(sumW[1] + state * self.p[0])
-            #  Output gate activation
-            out[i] = tanh(state) * sigmoid(sumW[3]  + state * self.p[2])
-            out_prev = out[i]
+            state = self.step(v, state)
+            out[i] = state
         return out
 
-class reverse:
+class reverse(Layer):
     """  Runs a recurrent layer in reverse time (backwards)
     """
     def __init__(self, layer):
@@ -204,7 +237,7 @@ class reverse:
         assert self.in_size() == inMat.shape[1]
         return self.layer.run(inMat[::-1])[::-1]
 
-class parallel:
+class parallel(Layer):
     """ Run multiple layers in parallel (all have same input and outputs are concatenated)
     """
     def __init__(self, layers):
@@ -223,7 +256,7 @@ class parallel:
         assert self.in_size() == inMat.shape[1]
         return np.hstack(map(lambda x: x.run(inMat), self.layers))
 
-class serial:
+class serial(Layer):
     """ Run multiple layers serially: output of a layer is the input for the next layer
     """
     def __init__(self, layers):
