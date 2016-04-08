@@ -182,7 +182,8 @@ def main():
         'min_len':args.min_len,
         'max_len':args.max_len,
         'section':args.section,
-        'event_detect':args.event_detect
+        'event_detect':args.event_detect,
+        'write_events':args.write_fast5,
     }
 
 
