@@ -170,11 +170,6 @@ class lstm_layer:
             global queue
             
             fp_type = np.float32 # uses this floating point type in the kernel
-            
-            W = self.W
-            kernel_src = kernel_code_lstm
-            
-            W = np.transpose(self.W, axes=[0,2,1])
             kernel_src = kernel_code_lstm
             
             # Build the kernel (builds for the first time, then uses cached version)
@@ -187,13 +182,13 @@ class lstm_layer:
             prg = cl.Program(ctx, kernel_src).build("-I. -Werror " + opencl_fptype_define + " -DWORK_ITEMS="+str(self.out_size())+" -DOUT_SIZE="+str(self.out_size())+" -DIN_MAT_Y="+str(inMat.shape[1]))
             
             inMatc = inMat
-            Wc = W
+            Wc = np.transpose(self.W, axes=[0,2,1])
             bc = self.b
             pc = self.p
             # Convert arrays if the types are different
             if tang_nn_type != fp_type:
                 inMatc = inMat.astype(np.float32)
-                Wc = W.astype(np.float32)
+                Wc = Wc.astype(np.float32)
                 bc = self.b.astype(np.float32)
                 pc = self.p.astype(np.float32)
             
@@ -205,7 +200,7 @@ class lstm_layer:
             cl_out = cl.Buffer(ctx, cl.mem_flags.WRITE_ONLY, out.shape[0]*out.shape[1]*inMatc.itemsize)
 
             # Run the kernel
-            prg.run_lstm_layer(queue, (self.out_size(), 1), (self.out_size(), 1), np.int32(inMat.shape[0]), np.int32(W.shape[1]), np.int32(W.shape[2]), cl_inMat, cl_W, cl_b, cl_p, cl_out)
+            prg.run_lstm_layer(queue, (self.out_size(), 1), (self.out_size(), 1), np.int32(inMatc.shape[0]), np.int32(Wc.shape[1]), np.int32(Wc.shape[2]), cl_inMat, cl_W, cl_b, cl_p, cl_out)
             
             # Copy results back to host (blocking call)
             outRavel = np.ravel(out)
@@ -215,9 +210,8 @@ class lstm_layer:
                 outRavel[:] = outRavel32[:]
             else:
                 cl.enqueue_copy(queue, outRavel, cl_out)
-            out = np.reshape(outRavel, (out.shape[0], out.shape[1]))
+            out = np.copy(np.reshape(outRavel, (out.shape[0], out.shape[1])))
         else:
-            out = np.zeros((inMat.shape[0], self.out_size()), dtype=tang_nn_type)
             state = np.zeros(self.out_size(), dtype=tang_nn_type)
             out_prev = np.zeros(self.out_size(), dtype=tang_nn_type)
     
