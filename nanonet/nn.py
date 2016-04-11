@@ -131,12 +131,70 @@ class softmax:
 
     def run(self, inMat):
         assert self.in_size() == inMat.shape[1]
-        tmp =  inMat.dot(self.W) + self.b
-        m = np.amax(tmp, axis=1).reshape((-1,1))
-        tmp = np.exp(tmp - m)
-        x = np.sum(tmp, axis=1)
-        tmp /= x.reshape((-1,1))
-        return tmp
+        if use_opencl == True:
+            # Init OpenCL (does it once)
+            init_opencl()
+            global ctx
+            global queue
+            
+            fp_type = np.float32 # uses this floating point type in the kernel
+            kernel_src = kernel_code_softmax
+            
+            # Calculate work items 
+            local_x = 256
+            local_y = 1
+            global_x = inMat.shape[0]
+            if global_x % local_x:
+                global_x = (global_x / local_x + 1) * local_x 
+            global_y = 1
+            local_x_softmax = 256
+            
+            # Build the kernel (builds for the first time, then uses cached version)
+            opencl_fptype = "double"
+            opencl_fptype_suffix = ""
+            if fp_type == np.float32:
+                opencl_fptype = "float"
+                opencl_fptype_suffix = "f"
+            opencl_fptype_define = "-DFPTYPE="+opencl_fptype+" -DF="+opencl_fptype_suffix
+            prg = cl.Program(ctx, kernel_src).build("-I. -Werror " + opencl_fptype_define + 
+            " -DWORK_ITEMS="+str(local_x)+" -DIN_MAT_Y="+str(inMat.shape[1]) + 
+            " -DWORK_ITEMS_PAR="+str(local_x_softmax) + " -DITER="+str((self.W.shape[1]-1)/local_x_softmax))
+            
+            inMatc = inMat
+            Wc = np.transpose(self.W)
+            bc = self.b
+            # Convert arrays if the types are different
+            if tang_nn_type != fp_type:
+                inMatc = inMat.astype(np.float32)
+                Wc = Wc.astype(np.float32)
+                bc = self.b.astype(np.float32)
+            
+            # Allocate OpenCL buffers    
+            cl_inMat = cl.Buffer(ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR, hostbuf=np.ravel(inMatc))
+            cl_W = cl.Buffer(ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR, hostbuf=np.ravel(Wc))
+            cl_b = cl.Buffer(ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR, hostbuf=np.ravel(bc))
+            cl_out = cl.Buffer(ctx, cl.mem_flags.WRITE_ONLY, inMat.shape[0]*self.W.shape[1]*inMatc.itemsize)
+
+            # Run the kernel
+            prg.run_layer(queue, (global_x, global_y), (local_x, local_y), np.int32(inMat.shape[0]), np.int32(Wc.shape[0]), cl_inMat, cl_W, cl_b, cl_out)
+            prg.run_softmax(queue, (inMat.shape[0]*local_x_softmax, 1), (local_x_softmax, 1), np.int32(Wc.shape[0]), cl_out)
+            
+            # Copy results back to host (blocking call)
+            outRavel = np.zeros(inMat.shape[0]*self.W.shape[1], dtype=np.float64)
+            if tang_nn_type != fp_type:
+                outRavel32 = np.zeros(outRavel.size, dtype=np.float32)
+                cl.enqueue_copy(queue, outRavel32, cl_out)
+                outRavel[:] = outRavel32[:]
+            else:
+                cl.enqueue_copy(queue, outRavel, cl_out)
+            return np.copy(np.reshape(outRavel, (inMat.shape[0], self.W.shape[1])))
+        else:
+            tmp =  inMat.dot(self.W) + self.b
+            m = np.amax(tmp, axis=1).reshape((-1,1))
+            tmp = np.exp(tmp - m)
+            x = np.sum(tmp, axis=1)
+            tmp /= x.reshape((-1,1))
+            return tmp
 
 class rnn_layer:
     """ A simple recurrent layer
@@ -449,3 +507,109 @@ void run_lstm_layer(
     }      
 }
 """
+
+kernel_code_softmax = """
+#if __OPENCL_VERSION__ <= CL_VERSION_1_1
+#pragma OPENCL EXTENSION cl_khr_fp64: enable
+#endif
+
+__kernel __attribute__((reqd_work_group_size(WORK_ITEMS, 1, 1)))
+void run_layer(
+    int inMatx,
+    int Wx, 
+    __global const FPTYPE* restrict inMat, 
+    __global const FPTYPE* restrict W, 
+    __global const FPTYPE* restrict b, 
+    __global FPTYPE* restrict ret
+){
+    int id = get_global_id(0);
+    if(id < inMatx)
+    {
+        FPTYPE inMatBuffer[IN_MAT_Y];
+        for(int z = 0; z < IN_MAT_Y; ++z)
+            inMatBuffer[z] = inMat[id*IN_MAT_Y+z];
+        
+        for(int y = 0; y < Wx; ++y)
+        {
+            FPTYPE r = 0.0F;
+            for(int z = 0; z < IN_MAT_Y; ++z)
+                r += inMatBuffer[z] * W[y*IN_MAT_Y+z];
+            ret[id*Wx+y] = r + b[y];
+        }
+    }
+}
+
+inline void parallel_sum(__local FPTYPE * restrict buffer)
+{
+    // Perform parallel reduction
+    int local_index = get_local_id(0);
+    for (int offset = get_local_size(0) / 2; offset > 0; offset = offset / 2) 
+    {
+        if (local_index < offset) 
+            buffer[local_index] += buffer[local_index + offset];
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+}
+
+inline void parallel_max(__local FPTYPE * restrict buffer)
+{
+    // Perform parallel reduction
+    int local_index = get_local_id(0);
+    for (int offset = get_local_size(0) / 2; offset > 0; offset = offset / 2) 
+    {
+        if (local_index < offset)
+            if (buffer[local_index + offset] > buffer[local_index]) 
+                buffer[local_index] = buffer[local_index + offset];
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+}
+
+__kernel __attribute__((reqd_work_group_size(WORK_ITEMS_PAR, 1, 1)))       // WORK_ITEMS_PAR = 2^n
+void run_softmax(
+    int size,                         // 2^n+1
+    __global FPTYPE * restrict inout
+){
+    int local_id = get_local_id(0);
+    int local_size = get_local_size(0);
+    int group_id = get_group_id(0);
+    
+    __local FPTYPE buffer[WORK_ITEMS_PAR];
+    __local FPTYPE last_in;
+    FPTYPE elem[ITER];
+    FPTYPE max = 0.0F;
+    FPTYPE sum = 0.0F;
+    
+    if(local_id == 0)
+        last_in = inout[(group_id+1) * size - 1]; // access last size-1 element
+    barrier(CLK_LOCAL_MEM_FENCE);
+    max = last_in;
+    
+    for(int x = 0; x < size-1; x += local_size)
+    {
+        elem[x/local_size] = buffer[local_id] = inout[group_id * size + local_id + x];
+        barrier(CLK_LOCAL_MEM_FENCE);
+        parallel_max(buffer);
+        max = max > buffer[0] ? max : buffer[0];
+    }
+    
+    for(int x = 0; x < size-1; x += local_size)
+        elem[x/local_size] = exp(elem[x/local_size] - max); 
+
+    if(local_id == 0)
+        last_in = exp(last_in-max);
+
+    for(int x = 0; x < size-1; x += local_size)
+    {
+        buffer[local_id] = elem[x/local_size];
+        barrier(CLK_LOCAL_MEM_FENCE);
+        parallel_sum(buffer);
+        sum += buffer[0];
+    }
+    sum += last_in;
+    
+    for(int x = 0; x < size-1; x += local_size)
+        inout[group_id * size + local_id + x] = elem[x/local_size] / sum;
+    if(local_id == 0)
+        inout[(group_id+1) * size - 1] = last_in / sum;  
+}
+""" 
