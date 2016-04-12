@@ -215,13 +215,16 @@ def get_labels_ont_mapping(filename, kmer_len=3, section='template'):
                 'kmers in mapping file are {}mers, but requested {}mers.'.format(
                 base_kmer_len, kmer_len
             ))
-        k1 = len(events['kmer'][0])/2 - kmer_len/2 - 1
-        k2 = k1 + kmer_len
-        y = np.fromiter(
-            (k[k1:k2] for k in events['kmer']),
-            dtype='>S{}'.format(kmer_len),
-            count = len(events)
-        )
+        if base_kmer_len == kmer_len:
+            y = events['kmer']
+        else:
+            k1 = base_kmer_len/2 - kmer_len/2 - 1
+            k2 = k1 + kmer_len
+            y = np.fromiter(
+                (k[k1:k2] for k in events['kmer']),
+                dtype='>S{}'.format(kmer_len),
+                count = len(events)
+            )
         y[~events['good_emission']] = bad_kmer
     return y
 
@@ -296,11 +299,11 @@ def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
                     (all_kmers[k] for k in labels),
                     dtype=np.int16, count=len(labels)
                 )
-            except:
+            except Exception as e:
                 # Checks for erroneous alphabet or kmer length
                 raise RuntimeError(
                     'Could not convert kmer labels to ints in file {}. '
-                    'Check labels are no longer than {} and contain only {}'.format(f, kmer_len, alpha)
+                    'Check labels are no longer than {} and contain only {}'.format(f, kmer_len, alphabet)
                 )
             else:
                 print "Adding: {}".format(f)

@@ -5,15 +5,24 @@ import sys
 
 import numpy as np
 from nanonet import nn
+from nanonet.util import all_nmers
 from nanonet.cmdargs import FileExist
 
 parser = argparse.ArgumentParser(
-    description='Convert currennt json network file into pickle',
+    description='Convert currennt json network file into pickle. Makes assumptions about meta data.',
     formatter_class=argparse.ArgumentDefaultsHelpFormatter
 )
 parser.add_argument('input', action=FileExist,
     help='File containing current network')
 parser.add_argument('output', help='Output pickle file')
+
+parser.add_argument("--kmer_length", type=int, default=5,
+    help="Length of kmers to learn.")
+parser.add_argument("--bases", type=str, default='ACGT',
+    help="Alphabet of kmers to learn.")
+parser.add_argument("--window", type=int, nargs='+', default=[-1, 0, 1],
+    help="The detailed list of the entire window.")
+
 
 def toarray(x):
     return np.ascontiguousarray(np.array(x, order='C', dtype=nn.dtype))
@@ -125,6 +134,15 @@ if __name__ == '__main__':
     if not 'weights' in in_network:
         sys.stderr.write('Could not find any weights in {} -- is network trained?\n'.format(args.network))
         exit(1)
+
+    # Build meta, taking some guesses
+    kmers = all_nmers(args.kmer_length, alpha=args.bases)
+    kmers.append('X'*args.kmer_length)
+    in_network['meta'] = {
+        'window':args.window,
+        'n_features':in_network['layers'][0]['size'],
+        'kmers':kmers,
+    }
 
     network = network_to_numpy(in_network)
     np.save(args.output, network)
