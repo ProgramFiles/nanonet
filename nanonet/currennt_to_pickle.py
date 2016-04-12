@@ -16,7 +16,7 @@ parser.add_argument('input', action=FileExist,
 parser.add_argument('output', help='Output pickle file')
 
 def toarray(x):
-    return np.ascontiguousarray(np.array(x, order='C', dtype=nn.tang_nn_type))
+    return np.ascontiguousarray(np.array(x, order='C', dtype=nn.dtype))
 
 def parse_layer_input(size, weights):
     return None
@@ -25,7 +25,7 @@ def parse_layer_feedforward(size, weights, fun):
     M = toarray(weights['input'])
     M = M.reshape((size, -1)).transpose()
     b = toarray(weights['bias'])
-    return nn.layer(M, b, fun)
+    return nn.Layer(M, b, fun)
 
 def parse_layer_feedforward_tanh(size, weights):
     return parse_layer_feedforward(size, weights, nn.tanh)
@@ -40,7 +40,7 @@ def parse_layer_softmax(size, weights):
     M = toarray(weights['input'])
     M = M.reshape((size, -1)).transpose()
     b = toarray(weights['bias'])
-    return nn.softmax(M ,b)
+    return nn.SoftMax(M ,b)
 
 def parse_layer_multiclass(size, weights):
     return None
@@ -56,21 +56,21 @@ def parse_layer_blstm(size, weights):
     bM1 = wgts_bias[:, 0, :]
     lM1 = wgts_internalMat[:, 0, :, :]
     pM1 = wgts_internalPeep[:, 0, :]
-    layer1 = nn.lstm_layer(iM1, lM1, bM1, pM1)
+    layer1 = nn.LSTM(iM1, lM1, bM1, pM1)
 
     iM2 = wgts_input[:, 1, :, :]
     bM2 = wgts_bias[:, 1, :]
     lM2 = wgts_internalMat[:, 1, :, :]
     pM2 = wgts_internalPeep[:, 1, :]
-    layer2 = nn.lstm_layer(iM2, lM2, bM2, pM2)
-    return nn.birnn(layer1, layer2)
+    layer2 = nn.LSTM(iM2, lM2, bM2, pM2)
+    return nn.BiRNN(layer1, layer2)
 
 def parse_layer_lstm(size, weights):
     iM = toarray(weights['input']).reshape((4, size, -1)).transpose((0, 2, 1))
     bM = toarray(weights['bias']).reshape((4, size))
     lM = toarray(weights['internal'][ : 4 * size * size]).reshape((4, size, size)).transpose((0, 2, 1))
     pM = toarray(weights['internal'][4 * size * size : ]).reshape((3, size))
-    return nn.lstm(iM, lM, bM, pM)
+    return nn.LSTM(iM, lM, bM, pM)
 
 
 LAYER_DICT = {'input' : parse_layer_input,
@@ -104,7 +104,7 @@ def network_to_numpy(in_network):
     meta = None
     if 'meta' in in_network:
         meta = in_network['meta']
-    network = nn.serial(layers)
+    network = nn.Serial(layers)
     network.meta = meta
     return network
 
