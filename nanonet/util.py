@@ -111,6 +111,7 @@ class FastaWrite(object):
         
         for chunk in (seq[i:i+line_length] for i in xrange(0, len(seq), line_length)):
             self.fh.write('{}\n'.format(chunk))
+        self.fh.flush()
 
 
 def _try_except_pass(func, *args, **kwargs):
