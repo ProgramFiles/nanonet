@@ -183,7 +183,7 @@ def main():
         'max_len':args.max_len,
         'section':args.section,
         'event_detect':args.event_detect,
-        'write_events':args.write_fast5
+        'write_events':args.write_fast5,
     }
 
 

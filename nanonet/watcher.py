@@ -21,6 +21,7 @@ class Fast5Watcher(object):
         self.timeout = timeout
         self.q = Queue()
         self.watcher = Process(target=self._watcher)
+        self.yielded = set()
 
     def _watcher(self):
         handler = RegexMatchingEventHandler(regexes=['.*\.fast5$'], ignore_directories=True)
@@ -38,7 +39,10 @@ class Fast5Watcher(object):
     def fast5_collector(self):
         while True:
             try:
-                yield self.q.get(self.timeout)
+                f = self.q.get(self.timeout)
+                if f not in self.yielded:
+                    yield f
+                    self.yielded.add(f)
             except:
                 break
 
@@ -50,5 +54,7 @@ class Fast5Watcher(object):
             except:
                 break
             else:
-                yield item
+                if item not in self.yielded:
+                    yield item
+                    self.yielded.add(item)
         self.watcher.join()
