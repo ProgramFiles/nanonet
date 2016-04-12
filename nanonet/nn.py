@@ -306,8 +306,7 @@ class Serial(Layer):
 
 
 class BiRNN(Parallel):
-    """A bidirectional RNN from two RNNs. Acutally there's no requirement than
-    the input layers be RNNs."""
+    """A bidirectional RNN from two RNNs."""
     def __init__(self, layer1, layer2):
         super(BiRNN, self).__init((layer1, Reverse(layer2))
 
