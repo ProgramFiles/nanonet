@@ -56,14 +56,13 @@ class Layer(object):
         """Input size"""
         pass
 
-    @abc.abtractproperty
+    @abc.abstractproperty
     def out_size(self):
         """Output size"""
         pass
 
 
 class RNN(Layer):
-
     @abc.abstractmethod
     def step(self, in_vec, state):
         """A single step along the RNN.
@@ -89,9 +88,11 @@ class FeedForward(Layer):
         self.W = W
         self.f = fun
 
+    @property
     def in_size(self):
         return self.W.shape[0]
 
+    @property
     def out_size(self):
         return self.W.shape[1]
 
@@ -114,13 +115,16 @@ class SoftMax(Layer):
         self.b = np.zeros(W.shape[1], dtype=dtype) if b is None else b
         self.W = W
 
+    @property
     def in_size(self):
         return self.W.shape[0]
 
+    @property
     def out_size(self):
         return self.W.shape[1]
 
     def run(self, inMat):
+        print self.in_size
         assert self.in_size == inMat.shape[1]
         tmp =  inMat.dot(self.W) + self.b
         m = np.amax(tmp, axis=1).reshape((-1,1))
@@ -149,9 +153,11 @@ class SimpleRNN(RNN):
         self.fun = fun
         self.size = W.shape[0] - W.shape[1]
 
+    @property
     def in_size(self):
         return self.size
 
+    @property
     def out_size(self):
         return self.W.shape[1]
 
@@ -209,9 +215,11 @@ class LSTM(RNN):
         self.p = np.ascontiguousarray(p)
         self.isize = iW.shape[1]
 
+    @property
     def in_size(self):
         return self.isize
 
+    @property
     def out_size(self):
         return self.size
 
@@ -248,9 +256,11 @@ class Reverse(Layer):
     def __init__(self, layer):
        self.layer = layer
 
+    @property
     def in_size(self):
         return self.layer.in_size
 
+    @property
     def out_size(self):
         return self.layer.out_size
 
@@ -269,9 +279,11 @@ class Parallel(Layer):
             assert in_size == layers[i].in_size, "Incompatible shapes: {} -> {} in layers {}.\n".format(in_size, layers[i].in_size, i)
         self.layers = layers
 
+    @property
     def in_size(self):
         return self.layers[0].in_size
 
+    @property
     def out_size(self):
         return sum(x.out_size for x in self.layers)
 
@@ -291,9 +303,11 @@ class Serial(Layer):
             prev_out_size = layers[i].out_size
         self.layers = layers
 
+    @property
     def in_size(self):
         return self.layers[0].in_size
 
+    @property
     def out_size(self):
         return self.layers[-1].out_size
 
@@ -308,5 +322,5 @@ class Serial(Layer):
 class BiRNN(Parallel):
     """A bidirectional RNN from two RNNs."""
     def __init__(self, layer1, layer2):
-        super(BiRNN, self).__init((layer1, Reverse(layer2))
+        super(BiRNN, self).__init__((layer1, Reverse(layer2)))
 
