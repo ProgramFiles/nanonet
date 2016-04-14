@@ -21,7 +21,7 @@ if mo:
     version = mo.group(1)
 else:
     raise RuntimeError('Unable to find version string in "nanonet/__init__.py".')
-    
+
 c_compile_args = [
     '-Wall', '-DNDEBUG', '-std=c99',
     '-fstrict-aliasing', '-O3', '-march=native'
@@ -65,7 +65,7 @@ setup(
     dependency_links=[],
     zip_safe=True,
     ext_modules=extensions,
-    #test_suite='discover_tests',
+    test_suite='discover_tests',
     entry_points={
         'console_scripts': [
             'nanonetcall = nanonet.nanonetcall:main',

@@ -94,7 +94,7 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, w
     t2 = timeit.default_timer()
     feature_time = t2 - t1
 
-    post = network.run(features.astype(nn.tang_nn_type))
+    post = network.run(features.astype(nn.dtype))
     t3 = timeit.default_timer()
     network_time = t3 - t2
 
