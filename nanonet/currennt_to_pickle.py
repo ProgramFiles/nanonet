@@ -8,27 +8,31 @@ from nanonet import nn
 from nanonet.util import all_nmers
 from nanonet.cmdargs import FileExist
 
-parser = argparse.ArgumentParser(
-    description='Convert currennt json network file into pickle. Makes assumptions about meta data.',
-    formatter_class=argparse.ArgumentDefaultsHelpFormatter
-)
-parser.add_argument('input', action=FileExist,
-    help='File containing current network')
-parser.add_argument('output', help='Output pickle file')
-
-parser.add_argument("--kmer_length", type=int, default=5,
-    help="Length of kmers to learn.")
-parser.add_argument("--bases", type=str, default='ACGT',
-    help="Alphabet of kmers to learn.")
-parser.add_argument("--window", type=int, nargs='+', default=[-1, 0, 1],
-    help="The detailed list of the entire window.")
+def get_parser()
+    parser = argparse.ArgumentParser(
+        description='Convert currennt json network file into pickle. Makes assumptions about meta data.',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument('input', action=FileExist,
+        help='File containing current network')
+    parser.add_argument('output', help='Output pickle file')
+    
+    parser.add_argument("--kmer_length", type=int, default=5,
+        help="Length of kmers to learn.")
+    parser.add_argument("--bases", type=str, default='ACGT',
+        help="Alphabet of kmers to learn.")
+    parser.add_argument("--window", type=int, nargs='+', default=[-1, 0, 1],
+        help="The detailed list of the entire window.")
+    return parser
 
 
 def toarray(x):
     return np.ascontiguousarray(np.array(x, order='C', dtype=nn.dtype))
 
+
 def parse_layer_input(size, weights):
     return None
+
 
 def parse_layer_feedforward(size, weights, fun):
     M = toarray(weights['input'])
@@ -36,14 +40,18 @@ def parse_layer_feedforward(size, weights, fun):
     b = toarray(weights['bias'])
     return nn.Layer(M, b, fun)
 
+
 def parse_layer_feedforward_tanh(size, weights):
     return parse_layer_feedforward(size, weights, nn.tanh)
+
 
 def parse_layer_feedforward_sigmoid(size, weights):
     return parse_layer_feedforward(size, weights, nn.sigmoid)
 
+
 def parse_layer_feedforward_linear(size, weights):
     return parse_layer_feedforward(size, weights, nn.linear)
+
 
 def parse_layer_softmax(size, weights):
     M = toarray(weights['input'])
@@ -51,8 +59,10 @@ def parse_layer_softmax(size, weights):
     b = toarray(weights['bias'])
     return nn.SoftMax(M ,b)
 
+
 def parse_layer_multiclass(size, weights):
     return None
+
 
 def parse_layer_blstm(size, weights):
     size = size / 2
@@ -74,6 +84,7 @@ def parse_layer_blstm(size, weights):
     layer2 = nn.LSTM(iM2, lM2, bM2, pM2)
     return nn.BiRNN(layer1, layer2)
 
+
 def parse_layer_lstm(size, weights):
     iM = toarray(weights['input']).reshape((4, size, -1)).transpose((0, 2, 1))
     bM = toarray(weights['bias']).reshape((4, size))
@@ -91,6 +102,7 @@ LAYER_DICT = {'input' : parse_layer_input,
               'blstm' : parse_layer_blstm,
               'softmax' : parse_layer_softmax,
               'multiclass_classification' : parse_layer_multiclass}
+
 
 def parse_layer(layer_type, size, weights):
     if not layer_type in LAYER_DICT:
@@ -119,7 +131,7 @@ def network_to_numpy(in_network):
 
 
 if __name__ == '__main__':
-    args = parser.parse_args() 
+    args = get_parser().parse_args() 
 
     try:
         with open(args.input, 'r') as fh:
