@@ -124,7 +124,6 @@ class SoftMax(Layer):
         return self.W.shape[1]
 
     def run(self, inMat):
-        print self.in_size
         assert self.in_size == inMat.shape[1]
         tmp =  inMat.dot(self.W) + self.b
         m = np.amax(tmp, axis=1).reshape((-1,1))
@@ -247,7 +246,7 @@ class LSTM(RNN):
 
         for i, v in enumerate(inMat):
             state = self.step(v, state)
-            out[i] = state
+            out[i] = state[:self.out_size]
         return out
 
 

@@ -8,7 +8,7 @@ from nanonet import nn
 from nanonet.util import all_nmers
 from nanonet.cmdargs import FileExist
 
-def get_parser()
+def get_parser():
     parser = argparse.ArgumentParser(
         description='Convert currennt json network file into pickle. Makes assumptions about meta data.',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -38,7 +38,7 @@ def parse_layer_feedforward(size, weights, fun):
     M = toarray(weights['input'])
     M = M.reshape((size, -1)).transpose()
     b = toarray(weights['bias'])
-    return nn.Layer(M, b, fun)
+    return nn.FeedForward(M, b, fun)
 
 
 def parse_layer_feedforward_tanh(size, weights):
