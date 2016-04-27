@@ -6,6 +6,8 @@ _BASES = ['A', 'C', 'G', 'T']
 _DIBASES = [b1 + b2 for b1 in _BASES for b2 in _BASES]
 _NSTEP = len(_BASES)
 _NSKIP = _NSTEP ** 2
+_STEP_FACTOR = np.log(_NSTEP)
+_SKIP_FACTOR = np.log(_NSKIP)
 
 
 def decode_profile(post, trans=None, log=False, slip=0.0):
@@ -24,6 +26,13 @@ def decode_profile(post, trans=None, log=False, slip=0.0):
 
     if trans is None:
         trans = itertools.repeat(np.zeros(3))
+    else:
+        trans = np.copy(trans)
+        if not log:
+            np.add(_ETA, trans, trans)
+            np.log(trans, trans)
+        trans[:,1] -= _STEP_FACTOR
+        trans[:,2] -= _SKIP_FACTOR
 
     log_slip = np.log(_ETA + slip)
 
