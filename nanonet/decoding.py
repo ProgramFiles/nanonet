@@ -28,9 +28,6 @@ def decode_profile(post, trans=None, log=False, slip=0.0):
         trans = itertools.repeat(np.zeros(3))
     else:
         trans = np.copy(trans)
-        if not log:
-            np.add(_ETA, trans, trans)
-            np.log(trans, trans)
         trans[:,1] -= _STEP_FACTOR
         trans[:,2] -= _SKIP_FACTOR
 
