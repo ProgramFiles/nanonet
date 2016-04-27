@@ -13,7 +13,7 @@ from nanonet import run_currennt_noisy
 from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
 from nanonet.fast5 import iterate_fast5
 from nanonet.features import make_currennt_training_input_multi
-from nanonet.util import random_string, conf_line
+from nanonet.util import random_string, conf_line, tang_imap
 from nanonet.currennt_to_pickle import network_to_numpy
 
 
@@ -73,6 +73,18 @@ def get_parser():
     return parser
 
 
+def prepare_input_file(in_out, **kwargs):
+    path, in_list, output = in_out 
+
+    print "Creating training data NetCDF: {}".format(output)
+    fast5_files = list(iterate_fast5(path, paths=True, strand_list=in_list))
+    return make_currennt_training_input_multi(
+        fast5_files=fast5_files, 
+        netcdf_file=output,
+        **kwargs
+    )
+
+
 def main():
     if len(sys.argv) == 1: 
         sys.argv.append("-h")
@@ -86,8 +98,6 @@ def main():
  
     # file names for training
     tag = random_string()
-    trainfile  = os.path.abspath(args.train)
-    valfile    = os.path.abspath(args.val)
     modelfile  = os.path.abspath(args.model)
     outputfile = os.path.abspath(args.output)
     temp_name = os.path.abspath(os.path.join(
@@ -97,37 +107,23 @@ def main():
         args.workspace, 'nn_{}.cfg'.format(tag)
     ))
     
-    callback_kwargs={'section':args.section, 'kmer_len':args.kmer_length}
-
-    # make training nc file
-    temp_file = '{}{}'.format(temp_name, 'train.netcdf')
-    print "Creating training data NetCDF: {}".format(temp_file)
-    fast5_files = list(iterate_fast5(trainfile, paths=True, strand_list=args.train_list))
-    n_chunks, n_features, out_kmers = make_currennt_training_input_multi(
-        fast5_files=fast5_files, 
-        netcdf_file=temp_file,
-        window=args.window,
-        kmer_len=args.kmer_length,
-        alphabet=args.bases,
-        callback_kwargs=callback_kwargs
+    # Create currennt training input files
+    trainfile = '{}{}'.format(temp_name, 'train.netcdf') 
+    valfile = '{}{}'.format(temp_name, 'validation.netcdf')
+    inputs = (
+        (args.train, args.train_list, trainfile),
+        (args.val, args.val_list, valfile),
     )
-    if n_chunks == 0:
-        raise RuntimeError("No training data written.")
-    trainfile = temp_file
-
-    # make validation nc file 
-    temp_file = '{}{}'.format(temp_name, 'validation.netcdf')
-    print "Creating validation data NetCDF: {}".format(temp_file)
-    fast5_files = list(iterate_fast5(valfile, paths=True, strand_list=args.val_list))
-    make_currennt_training_input_multi(
-        fast5_files=fast5_files, 
-        netcdf_file=temp_file, 
-        window=args.window,
-        kmer_len=args.kmer_length,
-        alphabet=args.bases,
-        callback_kwargs=callback_kwargs
-    )
-    valfile=temp_file
+    fix_kwargs = {
+        'window':args.window,
+        'kmer_len':args.kmer_length,
+        'alphabet':args.bases,
+        'callback_kwargs':{'section':args.section, 'kmer_len':args.kmer_length}
+    }
+    for results in tang_imap(prepare_input_file, inputs, fix_kwargs=fix_kwargs, threads=2):
+        n_chunks, n_features, out_kmers = results
+        if n_chunks == 0:
+            raise RuntimeError("No training data written.")
 
 
     # fill-in templated items in model
