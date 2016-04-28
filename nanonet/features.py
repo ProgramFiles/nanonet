@@ -339,7 +339,7 @@ class SquiggleFeatureGenerator(object):
             The order in which the feature adding methods is called should be the
             same for both training and basecalling.
         """
-        self.events = events
+        self.events = np.copy(events)
         self.labels = labels
         self.features = {}
         self.feature_order = []
@@ -349,7 +349,7 @@ class SquiggleFeatureGenerator(object):
             scale_array(self.events[field], copy=False)
         delta = np.ediff1d(self.events['mean'], to_begin=0)
         scale_array(delta, with_mean=False, copy = False)
-        self.events = nprf.append_fields(events, 'delta', delta)
+        self.events = nprf.append_fields(self.events, 'delta', delta)
  
     def to_numpy(self):
         out = np.empty((len(self.events), len(self.feature_order)))
