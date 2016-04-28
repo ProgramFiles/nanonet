@@ -107,6 +107,8 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, w
         good_events = (max_call != bad_kmer)
         post = post[good_events]
         post = post[:, :-1]
+        if len(post) == 0:
+            return None
 
     weights = np.sum(post, axis=1).reshape((-1,1))
     post /= weights
