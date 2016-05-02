@@ -32,15 +32,14 @@ C++ Compiler for Python 2.7 from:
 
     https://www.microsoft.com/en-gb/download/details.aspx?id=44266
 
-The only required dependencies are h5py, numpy, and watchdog (used for watching
-a filesystem while reads are output from MinKNOW). These will be download and
+The only required dependencies are h5py and numpy. These will be downloaded and
 installed/compiled automatically. Alternatively install them from your system's
 package repository. For Windows Christophe Golke maintains a repository of
 compiled python wheels at:
 
     http://www.lfd.uci.edu/~gohlke/pythonlibs/
 
-See the full installation instructions for further details where instructions
+See the full installation instructions for further details, where instructions
 to perform a binary installation under Ubuntu can also be found.
 
 **Optional Components**
@@ -48,7 +47,7 @@ Nanonet contains an optional component to watch a filesystem for read files as
 they are produced by MinKnow. This feature is not installed by default. To
 install it run
 
-    pip install -e .[watcher]
+    pip install .[watcher]
 
 from the source directory. This will allow use of the `--watch` option of the
 basecaller.
@@ -73,13 +72,13 @@ command:
 
 will produced output along the following lines:
 
-    Basecalled 10 reads (47398 bases, 73150 events) in 161.7437057s (wall time)
+    Basecalled 5 reads (25747 bases, 49340 events) in 36.6668331623s (wall time)
     Profiling
     ---------
-    Feature generation: 4.5913898
-    Load network: 0.10911
-    Run network: 81.0764991 (0.579699426119 kb/s, 0.900384215036 kev/s)
-    Decoding: 74.1343571 (0.633984050561 kb/s, 0.984698631723 kev/s)
+    Feature generation: 1.08410215378
+    Load network: 0.0128238201141
+    Run network: 15.6343309879 (1.5990450771 kb/s, 3.13412835112 kev/s)
+    Decoding: 19.8838129044 (1.25730412574 kb/s, 2.46431608644 kev/s)
     
 **Filesystem watching**
 Nanonet has the ability to watch a filesystem as reads are produced. This
