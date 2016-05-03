@@ -32,12 +32,17 @@ C++ Compiler for Python 2.7 from:
 
     https://www.microsoft.com/en-gb/download/details.aspx?id=44266
 
-The only required dependencies are h5py and numpy. These will be downloaded and
-installed/compiled automatically. Alternatively install them from your system's
-package repository. For Windows Christophe Golke maintains a repository of
-compiled python wheels at:
+The only required dependencies are h5py and numpy. These can be downloaded and
+installed/compiled automatically though installing them from your system's
+package repository is generally preferable in the first instance. For Windows
+Christophe Golke maintains a repository of compiled python wheels at:
 
     http://www.lfd.uci.edu/~gohlke/pythonlibs/
+
+For OSX homebrew is easiest:
+
+    brew tap homebrew/science
+    brew install hdf5
 
 See the full installation instructions for further details, where instructions
 to perform a binary installation under Ubuntu can also be found.
