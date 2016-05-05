@@ -931,7 +931,7 @@ class Fast5(h5py.File):
             raise ValueError('Could not retrieve sequence data from {}'.format(location))
 
 
-def iterate_fast5(path, strand_list=None, paths=False, mode='r', limit=None):
+def iterate_fast5(path, strand_list=None, paths=False, mode='r', limit=None, files_group_pattern=None):
     """Iterate over directory or list of .fast5 files.
 
     :param path: Directory in which single read fast5 are located or filename.
@@ -939,6 +939,7 @@ def iterate_fast5(path, strand_list=None, paths=False, mode='r', limit=None):
     :param paths: yield file paths instead of fast5 objects.
     :param mode: mode for opening files.
     :param limit: limit number of files to consider.
+    :param files_group_pattern: yield file paths in groups of specified pattern
     """
     if strand_list is None:
         #  Could make glob more specific to filename pattern expected
@@ -953,7 +954,22 @@ def iterate_fast5(path, strand_list=None, paths=False, mode='r', limit=None):
         files = [os.path.join(path, x) for x in names]
     else:
         files = [os.path.join(path, x) for x in strand_list]
+    
+    # Re-populate list with filename, size tuples
+    for i in xrange(len(files)):
+        files[i] = (files[i], os.path.getsize(files[i]))
         
+    # Sort list by file size
+    # If reverse=True sort from largest to smallest
+    # If reverse=False sort from smallest to largest
+    files.sort(key=lambda filename: filename[1], reverse=True)
+    
+    # Re-populate list with just filenames
+    for i in xrange(len(files)):
+        files[i] = files[i][0]
+    
+    list = []
+    cnt = 0    
     for f in files[:limit] :
         if not os.path.exists(f):
             sys.stderr.write('File {} does not exist, skipping\n'.format(f))
@@ -963,4 +979,19 @@ def iterate_fast5(path, strand_list=None, paths=False, mode='r', limit=None):
             yield fh
             fh.close()
         else:
-            yield os.path.abspath(f)
+            if not files_group_pattern:
+                yield os.path.abspath(f)
+            else:
+                files_nb = files_group_pattern[cnt]
+                if len(list) == files_nb-1:
+                    list.append(os.path.abspath(f))
+                    yield list
+                    list = []
+                    cnt +=1
+                    if cnt >= len(files_group_pattern):
+                        cnt = 0
+                else:
+                    list.append(os.path.abspath(f))
+    if len(list) > 0:
+        yield list
+            
