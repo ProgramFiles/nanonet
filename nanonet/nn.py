@@ -19,13 +19,7 @@ def relu(x):
 """  Convention: inMat row major (C ordering) as (time, state)
 """
 tang_nn_type = np.float64
-ctx = None
 
-def init_opencl():
-    global ctx
-    if ctx != None:
-        return
-    ctx = cl.create_some_context()
 
 
 class layer:
@@ -48,7 +42,7 @@ class layer:
     def out_size(self):
         return self.W.shape[1]
 
-    def run(self, inMat, queueList=None):
+    def run(self, inMat, ctx=None, queueList=None):
         if not queueList:
             assert self.in_size() == inMat.shape[1]
             return self.f(inMat.dot(self.W) + self.b)
@@ -139,7 +133,7 @@ class softmax:
     def out_size(self):
         return self.W.shape[1]
 
-    def run(self, inMat, queueList=None):
+    def run(self, inMat, ctx=None, queueList=None):
         if not queueList:
             assert self.in_size() == inMat.shape[1]
             tmp =  inMat.dot(self.W) + self.b
@@ -244,7 +238,7 @@ class rnn_layer:
     def out_size(self):
         return self.W.shape[1]
 
-    def run(self, inMat, queueList=None):
+    def run(self, inMat, ctx=None, queueList=None):
         assert self.in_size() == inMat.shape[1]
         out = np.zeros((inMat.shape[0], self.out_size()), dtype=tang_nn_type)
         state = np.zeros(self.size, dtype=tang_nn_type)
@@ -298,7 +292,7 @@ class lstm_layer:
     def out_size(self):
         return self.size
 
-    def run(self, inMat, queueList=None):
+    def run(self, inMat, ctx=None, queueList=None):
         if not queueList:
             assert self.in_size() == inMat.shape[1]
             out = np.zeros((inMat.shape[0], self.out_size()), dtype=tang_nn_type)
@@ -392,7 +386,7 @@ class reverse:
     def out_size(self):
         return self.layer.out_size()
 
-    def run(self, inMat, queueList=None):
+    def run(self, inMat, ctx=None, queueList=None):
         if not queueList:
             assert self.in_size() == inMat.shape[1]
             return self.layer.run(inMat[::-1])[::-1]
@@ -401,7 +395,7 @@ class reverse:
             for mat in inMat:
                 assert self.in_size() == mat.shape[1]
                 inMatList.append(mat[::-1])            
-            postList= self.layer.run(inMatList, queueList)
+            postList= self.layer.run(inMatList, ctx, queueList)
             postListTmp = []
             for post in postList:
                 postListTmp.append(post[::-1])
@@ -422,14 +416,14 @@ class parallel:
     def out_size(self):
         return sum(map(lambda x: x.out_size(), self.layers))
 
-    def run(self, inMat, queueList=None):
+    def run(self, inMat, ctx=None, queueList=None):
         if not queueList:
             assert self.in_size() == inMat.shape[1]
             return np.hstack(map(lambda x: x.run(inMat), self.layers))
         else:
             for mat in inMat:
                 assert self.in_size() == mat.shape[1]
-            tmp = map(lambda x: x.run(inMat, queueList), self.layers)
+            tmp = map(lambda x: x.run(inMat, ctx, queueList), self.layers)
             tmp2 = map(list, zip(*tmp))
             tmp3 = []
             for t in tmp2:
@@ -452,7 +446,7 @@ class serial:
     def out_size(self):
         return self.layers[-1].out_size()
 
-    def run(self, inMat, queueList=None):
+    def run(self, inMat, ctx=None, queueList=None):
         if not queueList:
             assert self.in_size() == inMat.shape[1]
             tmp = inMat
@@ -464,7 +458,7 @@ class serial:
                 assert self.in_size() == mat.shape[1]
             tmp = inMat
             for layer in self.layers:
-                tmp = layer.run(tmp, queueList)
+                tmp = layer.run(tmp, ctx, queueList)
             return tmp
 
 def birnn(layer1, layer2):

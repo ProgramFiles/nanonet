@@ -13,7 +13,6 @@ import pkg_resources
 import itertools
 import numpy as np
 import pyopencl as cl
-import datetime
 
 from nanonet import decoding, nn
 from nanonet.fast5 import Fast5, iterate_fast5
@@ -71,13 +70,38 @@ def get_parser():
         help="Offload computation to GPU using OpenCL.")
     parser.add_argument("--input_files_nb", default=1, type=int,
         help="Number of input fast5 files to be processed simultaneously. For GPU devices that support concurrent kernel execution.")
+    parser.add_argument("--list_platforms", action=AutoBool, default=False,
+        help="Output list of available OpenCL GPU platforms.")
+    parser.add_argument("--platforms", nargs="+", type=str,
+        help="List of OpenCL GPU platforms and devices to be used in a format VENDOR:DEVICE space separated, i.e. --platforms nvidia:0 amd:0 amd:1.")
 
     return parser
 
 class process_attr:
-    def __init__(self, fast5_files, use_opencl):
+    def __init__(self, fast5_files, use_opencl=False, vendor=None, device_id=0):
         self.fast5_files = fast5_files
         self.use_opencl = use_opencl
+        self.vendor = vendor
+        self.device_id = device_id
+
+def list_opencl_platforms():
+    print('\n' + '=' * 60 + '\nOpenCL Platforms and Devices')
+    platforms = [p for p in cl.get_platforms() if p.get_devices(device_type=cl.device_type.GPU)]
+    for platform in platforms:
+        print('=' * 60)
+        print('Platform - Name:  ' + platform.name)
+        print('Platform - Vendor:  ' + platform.vendor)
+        print('Platform - Version:  ' + platform.version)
+        for device in platform.get_devices(device_type=cl.device_type.GPU):  # Print each device per-platform
+            print('    ' + '-' * 56)
+            print('    Device - Name:  ' + device.name)
+            print('    Device - Type:  ' + cl.device_type.to_string(device.type))
+            print('    Device - Max Clock Speed:  {0} Mhz'.format(device.max_clock_frequency))
+            print('    Device - Compute Units:  {0}'.format(device.max_compute_units))
+            print('    Device - Local Memory:  {0:.0f} KB'.format(device.local_mem_size/1024))
+            print('    Device - Constant Memory:  {0:.0f} KB'.format(device.max_constant_buffer_size/1024))
+            print('    Device - Global Memory: {0:.0f} GB'.format(device.global_mem_size/1073741824.0))
+    print('\n')
         
 def process_read(modelfile, pa, min_prob=1e-5, trans=None, post_only=False, write_events=True, **kwargs):
     """Run neural network over a set of fast5 files
@@ -129,11 +153,15 @@ def process_read(modelfile, pa, min_prob=1e-5, trans=None, post_only=False, writ
             
     t2 = timeit.default_timer()
     if use_opencl:
-        nn.init_opencl()
+        platforms = [p for p in cl.get_platforms() if p.get_devices(device_type=cl.device_type.GPU) and pa.vendor.lower() in p.get_info(cl.platform_info.NAME).lower()]
+        platform = platforms[0]
+        devices = platform.get_devices(device_type=cl.device_type.GPU)
+        device = devices[pa.device_id]
+        ctx = cl.Context([device]) 
         queue_list = []
         for x in xrange(len(features_list)):
-            queue_list.append(cl.CommandQueue(nn.ctx))
-        post_list = network.run(features_list, queue_list)
+            queue_list.append(cl.CommandQueue(ctx))
+        post_list = network.run(features_list, ctx, queue_list)
         t3 = timeit.default_timer()
         for x in xrange(len(features_list)):
             network_time_list.append((t3 - t2)/len(features_list))
@@ -219,7 +247,11 @@ def main():
     if len(sys.argv) == 1:
         sys.argv.append("-h")
     args = get_parser().parse_args()
-
+    
+    if args.list_platforms:
+        list_opencl_platforms() 
+        sys.exit(0)
+        
     modelfile  = os.path.abspath(args.model)
     if args.section is None:
         try:
@@ -238,10 +270,11 @@ def main():
         'event_detect':args.event_detect
     }
 
-    files_pattern = []
-    for i in xrange(args.jobs):
-        files_pattern.append(1 if i%args.jobs or not args.use_opencl else args.input_files_nb)
-
+    files_pattern = [1] * args.jobs
+    if args.use_opencl:
+        for x in xrange(len(args.platforms)):
+            files_pattern[x] = args.input_files_nb
+            
     #TODO: handle case where there are pre-existing files.
     if args.watch is not None:
         # An optional component
@@ -252,8 +285,11 @@ def main():
 
     pa_list = []
     for i,ff in enumerate(fast5_files):
-        pa = process_attr(ff, use_opencl=False if i%args.jobs else args.use_opencl)
-        pa_list.append(pa)
+        if args.use_opencl and i % args.jobs in xrange(len(args.platforms)):
+            vendor,device_id = args.platforms[i%args.jobs].split(':')
+            pa_list.append(process_attr(ff, use_opencl=True, vendor=vendor, device_id=int(device_id)))
+        else:
+            pa_list.append(process_attr(ff))
 
     t0 = timeit.default_timer()
     n_reads = 0
