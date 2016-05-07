@@ -113,7 +113,7 @@ class layer:
                     cl.enqueue_copy(queueList[x], outRavel, cl_outList[x])
                 outList.append(np.copy(np.reshape(outRavel, (inMat[x].shape[0], self.W.shape[1]))))
             return outList
-
+            
 class softmax:
     """  Softmax layer
          tmp = exp( inmat W + b )
@@ -372,7 +372,7 @@ class lstm_layer:
                     cl.enqueue_copy(queueList[x], outRavel, cl_outList[x])
                 outList[x] = np.copy(np.reshape(outRavel, (outList[x].shape[0], outList[x].shape[1])))
             return outList
-            
+
 
 class reverse:
     """  Runs a recurrent layer in reverse time (backwards)
@@ -517,12 +517,11 @@ void run_lstm_layer(
     __global FPTYPE* restrict out
 ) {
     int id = get_global_id(0);
-    __local FPTYPE v2[IN_MAT_Y + OUT_SIZE];
+    __local FPTYPE v2[V2_SIZE];
     FPTYPE state = 0.0F;
     FPTYPE r[4];
     FPTYPE bb[4];
     FPTYPE pp[3];
-    FPTYPE W[4][V2_SIZE];
     
     for(int y = 0; y < 4; ++y)
         bb[y] = b[y*OUT_SIZE+id]; 
@@ -530,10 +529,6 @@ void run_lstm_layer(
     for(int y = 0; y < 3; ++y)
         pp[y] = p[y*OUT_SIZE+id];
         
-    for(int y = 0; y < 4; ++y)
-        for(int v2x = 0; v2x < V2_SIZE; ++v2x)
-            W[y][v2x] = Wtr[y*Wtry*Wtrz+(id*Wtrz)+v2x];
-    
     v2[IN_MAT_Y+id] = 0.0F;
     for(int x = 0; x < inMatx; ++x)
     {
@@ -546,10 +541,10 @@ void run_lstm_layer(
         for(int v2x = 0; v2x < V2_SIZE; ++v2x)
         {
             const FPTYPE v = v2[v2x];
-            r[0] += v * W[0][v2x];
-            r[1] += v * W[1][v2x];  
-            r[2] += v * W[2][v2x];
-            r[3] += v * W[3][v2x];
+            r[0] += v * Wtr[0*Wtry*Wtrz+(id*Wtrz)+v2x];
+            r[1] += v * Wtr[1*Wtry*Wtrz+(id*Wtrz)+v2x];
+            r[2] += v * Wtr[2*Wtry*Wtrz+(id*Wtrz)+v2x];
+            r[3] += v * Wtr[3*Wtry*Wtrz+(id*Wtrz)+v2x];
         }
         
         // Forget gate activation
