@@ -66,9 +66,9 @@ def get_parser():
     parser.add_argument("--trans", type=float, nargs=3, default=None,
         metavar=('stay', 'step', 'skip'), help='Base transition probabilities')
 
-    parser.add_argument("--use_opencl", action=AutoBool, default=False,
+    parser.add_argument("--opencl", action=AutoBool, default=False,
         help="Offload computation to GPU using OpenCL.")
-    parser.add_argument("--input_files_nb", default=1, type=int,
+    parser.add_argument("--opencl_input_files", default=1, type=int,
         help="Number of input fast5 files to be processed simultaneously. For GPU devices that support concurrent kernel execution.")
     parser.add_argument("--list_platforms", action=AutoBool, default=False,
         help="Output list of available OpenCL GPU platforms.")
@@ -271,9 +271,9 @@ def main():
     }
 
     files_pattern = [1] * args.jobs
-    if args.use_opencl:
+    if args.opencl:
         for x in xrange(len(args.platforms)):
-            files_pattern[x] = args.input_files_nb
+            files_pattern[x] = args.opencl_input_files
             
     #TODO: handle case where there are pre-existing files.
     if args.watch is not None:
@@ -285,7 +285,7 @@ def main():
 
     pa_list = []
     for i,ff in enumerate(fast5_files):
-        if args.use_opencl and i % args.jobs in xrange(len(args.platforms)):
+        if args.opencl and i % args.jobs in xrange(len(args.platforms)):
             vendor,device_id = args.platforms[i%args.jobs].split(':')
             pa_list.append(process_attr(ff, use_opencl=True, vendor=vendor, device_id=int(device_id)))
         else:
