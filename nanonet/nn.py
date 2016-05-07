@@ -104,14 +104,14 @@ class layer:
             # Copy results back to host (blocking call)
             outList = []
             for x in xrange(iter):
-                outRavel = np.zeros(inMat[x].shape[0]*self.W.shape[1], dtype=np.float64)
+                outList.append(np.zeros((inMat[x].shape[0],self.W.shape[1]), dtype=np.float64))
                 if tang_nn_type != fp_type:
+                    outRavel = np.ravel(outList[x])
                     outRavel32 = np.zeros(outRavel.size, dtype=np.float32)
                     cl.enqueue_copy(queueList[x], outRavel32, cl_outList[x])
                     outRavel[:] = outRavel32[:]
                 else:
-                    cl.enqueue_copy(queueList[x], outRavel, cl_outList[x])
-                outList.append(np.copy(np.reshape(outRavel, (inMat[x].shape[0], self.W.shape[1]))))
+                    cl.enqueue_copy(queueList[x], outList[x], cl_outList[x])
             return outList
             
 class softmax:
@@ -206,14 +206,14 @@ class softmax:
             # Copy results back to host (blocking call)
             outList = []
             for x in xrange(iter):
-                outRavel = np.zeros(inMat[x].shape[0]*self.W.shape[1], dtype=np.float64)
+                outList.append(np.zeros((inMat[x].shape[0],self.W.shape[1]), dtype=np.float64))
                 if tang_nn_type != fp_type:
+                    outRavel = np.ravel(outList[x])
                     outRavel32 = np.zeros(outRavel.size, dtype=np.float32)
                     cl.enqueue_copy(queueList[x], outRavel32, cl_outList[x])
                     outRavel[:] = outRavel32[:]
                 else:
-                    cl.enqueue_copy(queueList[x], outRavel, cl_outList[x])
-                outList.append(np.copy(np.reshape(outRavel, (inMat[x].shape[0], self.W.shape[1]))))
+                    cl.enqueue_copy(queueList[x], outList[x], cl_outList[x])
             return outList
 
 
