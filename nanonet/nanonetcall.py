@@ -30,7 +30,7 @@ __ETA__ = 1e-300
 
 def get_parser():
     parser = argparse.ArgumentParser(
-        description="""A simple ANN 3-mer basecaller, works only on HMM basecall mapped data.""",
+        description="""A simple RNN basecaller for Oxford Nanopore data.""",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     
