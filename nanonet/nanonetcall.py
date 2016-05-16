@@ -150,15 +150,17 @@ def process_read(modelfile, pa, min_prob=1e-5, trans=None, post_only=False, writ
             t3 = timeit.default_timer()
             network_time_list.append(t3 - t2)
             
-            
+    ctx = None
+    queue_list = []
+    max_workgroup_size = 256        
     t2 = timeit.default_timer()
     if use_opencl:
         platforms = [p for p in cl.get_platforms() if p.get_devices(device_type=cl.device_type.GPU) and pa.vendor.lower() in p.get_info(cl.platform_info.NAME).lower()]
         platform = platforms[0]
         devices = platform.get_devices(device_type=cl.device_type.GPU)
         device = devices[pa.device_id]
+        max_workgroup_size = device.get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
         ctx = cl.Context([device]) 
-        queue_list = []
         for x in xrange(len(features_list)):
             queue_list.append(cl.CommandQueue(ctx))
         post_list = network.run(features_list, ctx, queue_list)
@@ -193,7 +195,10 @@ def process_read(modelfile, pa, min_prob=1e-5, trans=None, post_only=False, writ
     
         post = min_prob + (1.0 - min_prob) * post
         trans = decoding.estimate_transitions(post, trans=trans)
-        score, states = decoding.decode_profile(post, trans=np.log(__ETA__ + trans), log=False)
+        if use_opencl:
+            score, states = decoding.decode_profile_opencl(ctx, queue_list, post, trans=np.log(__ETA__ + trans), log=False, max_workgroup_size=max_workgroup_size)
+        else:
+            score, states = decoding.decode_profile(post, trans=np.log(__ETA__ + trans), log=False)
     
         # Form basecall
         kmer_path = [kmers[i] for i in states]
