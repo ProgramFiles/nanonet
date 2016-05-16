@@ -67,7 +67,7 @@ def decode_profile(post, trans=None, log=False, slip=0.0):
 
     return np.amax(pscore), state_seq
     
-def decode_profile_opencl(ctx, queue_list, post, trans=None, log=False, slip=0.0, max_workgroup_size=256):
+def decode_profile_opencl(ctx, queue_list, post_list, trans_list=None, log=False, slip=0.0, max_workgroup_size=256):
     """  Viterbi-style decoding with per-event transition weights
     (profile)
     :param post: posterior probabilities of kmers by event.
@@ -76,23 +76,35 @@ def decode_profile_opencl(ctx, queue_list, post, trans=None, log=False, slip=0.0
     :param log: Posterior probabilities are in log-space.
     """
     fp_type = np.float32 # uses this floating point type in the kernel
+    iter = len(queue_list)
     
-    if trans is None:
-        trans = itertools.repeat(np.zeros(3))
+    if trans_list is None:
+        for x in xrange(iter):
+            trans_list.append(itertools.repeat(np.zeros(3)))
     
+    lpostList = []
     if fp_type == np.float32:
         slip = np.float32(slip)
-        lpost = post.copy().astype(np.float32)
-        trans = np.float32(trans)
+        for x in xrange(iter):
+            lpostList.append(post_list[x].copy().astype(np.float32))
+            trans_list[x] = np.float32(trans_list[x])
     else:
         slip = np.float64(slip)
-        lpost = post.copy()
+        for x in xrange(iter):
+            lpostList.append(post_list[x].copy())
     
-    cl_post = cl.Buffer(ctx, cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR, hostbuf=np.ravel(lpost))
-    cl_trans = cl.Buffer(ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR, hostbuf=np.ravel(trans))
-    state_seq = np.zeros(len(post), dtype=np.int32)
-    cl_state_seq = cl.Buffer(ctx, cl.mem_flags.READ_WRITE, len(post)*state_seq.itemsize)
-    cl_pscore_max = cl.Buffer(ctx, cl.mem_flags.READ_WRITE, 1*post.itemsize)
+    cl_postList = []
+    cl_transList = []
+    cl_state_seqList = []
+    cl_pscore_maxList = []
+    state_seqList = []
+    pscore_max = np.zeros(1, dtype=fp_type)
+    for x in xrange(iter):
+        cl_postList.append(cl.Buffer(ctx, cl.mem_flags.READ_WRITE | cl.mem_flags.USE_HOST_PTR, hostbuf=np.ravel(lpostList[x])))
+        cl_transList.append(cl.Buffer(ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR, hostbuf=np.ravel(trans_list[x])))
+        state_seqList.append(np.zeros(len(lpostList[x]), dtype=np.int32))
+        cl_state_seqList.append(cl.Buffer(ctx, cl.mem_flags.READ_WRITE, len(lpostList[x])*state_seqList[x].itemsize))
+        cl_pscore_maxList.append(cl.Buffer(ctx, cl.mem_flags.READ_WRITE, 1*pscore_max.itemsize))
 
     local_x = global_x = max_workgroup_size
     local_y = global_y = 1
@@ -104,15 +116,19 @@ def decode_profile_opencl(ctx, queue_list, post, trans=None, log=False, slip=0.0
         opencl_fptype_suffix = "f"
     opencl_fptype_define = "-DFPTYPE="+opencl_fptype+" -DF="+opencl_fptype_suffix
     
-    prg = cl.Program(ctx, kernel_code).build("-I. -Werror " + opencl_fptype_define + " -DWORK_ITEMS="+str(local_x)+" -DNUM_STATES="+str(post.shape[1]))
+    prg = cl.Program(ctx, kernel_code).build("-I. -Werror " + opencl_fptype_define + " -DWORK_ITEMS="+str(local_x)+" -DNUM_STATES="+str(lpostList[0].shape[1]))
     
-    prg.decode(queue_list[0], (global_x, global_y), (local_x, local_y), np.int32(post.shape[0]), slip, cl_post, cl_trans, cl_state_seq, cl_pscore_max)
+    for x in xrange(iter):
+        prg.decode(queue_list[x], (global_x, global_y), (local_x, local_y), np.int32(lpostList[x].shape[0]), slip, cl_postList[x], cl_transList[x], cl_state_seqList[x], cl_pscore_maxList[x])
+        queue_list[x].flush()
     
-    pscore_max = np.zeros(1, dtype=fp_type)
-    cl.enqueue_copy(queue_list[0], pscore_max, cl_pscore_max)
-    cl.enqueue_copy(queue_list[0], state_seq, cl_state_seq)
-   
-    return pscore_max[0], state_seq
+    pscore_maxList = []
+    for x in xrange(iter):
+        cl.enqueue_copy(queue_list[x], pscore_max, cl_pscore_maxList[x])
+        pscore_maxList.append(pscore_max[0])
+        cl.enqueue_copy(queue_list[x], state_seqList[x], cl_state_seqList[x])
+
+    return pscore_maxList, state_seqList
 
 def decode_transition(post, trans, log=False, slip=0.0):
     """  Viterbi-style decoding with weighted transitions

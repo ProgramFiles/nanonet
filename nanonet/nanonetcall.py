@@ -168,14 +168,13 @@ def process_read(modelfile, pa, min_prob=1e-5, trans=None, post_only=False, writ
         for x in xrange(len(features_list)):
             network_time_list.append((t3 - t2)/len(features_list))
 
-    ret = []
+    
     trans_copy = trans
-    #decode_time_list = []
+    trans_list = []
+    good_events_list = []
+    t3 = timeit.default_timer()
     for x in xrange(len(fast5_list)):
-        t3 = timeit.default_timer()
-        events = events_list[x]
         post = post_list[x]
-        name = name_list[x]
         trans = trans_copy
         
         kmers = network.meta['kmers']
@@ -185,6 +184,7 @@ def process_read(modelfile, pa, min_prob=1e-5, trans=None, post_only=False, writ
             bad_kmer = post.shape[1] - 1
             max_call = np.argmax(post, axis=1)
             good_events = (max_call != bad_kmer)
+            good_events_list.append(good_events)
             post = post[good_events]
             post = post[:, :-1]
     
@@ -194,20 +194,45 @@ def process_read(modelfile, pa, min_prob=1e-5, trans=None, post_only=False, writ
             return post
     
         post = min_prob + (1.0 - min_prob) * post
+        post_list[x] = post
         trans = decoding.estimate_transitions(post, trans=trans)
-        if use_opencl:
-            score, states = decoding.decode_profile_opencl(ctx, queue_list, post, trans=np.log(__ETA__ + trans), log=False, max_workgroup_size=max_workgroup_size)
-        else:
-            score, states = decoding.decode_profile(post, trans=np.log(__ETA__ + trans), log=False)
+        trans_list.append(np.log(__ETA__ + trans))
     
-        # Form basecall
-        kmer_path = [kmers[i] for i in states]
+    if use_opencl:
+        score_list, states_list = decoding.decode_profile_opencl(ctx, queue_list, post_list, trans_list=trans_list, log=False, max_workgroup_size=max_workgroup_size)
+    else:
+        score_list = [None] * len(fast5_list)
+        states_list = [None] * len(fast5_list)
+        for x in xrange(len(fast5_list)):
+            score_list[x], states_list[x] = decoding.decode_profile(post_list[x], trans=trans_list[x], log=False)
+            
+    # Form basecall
+    kmer_path_list = []
+    seq_list = []
+    for x in xrange(len(fast5_list)):
+        kmer_path = [kmers[i] for i in states_list[x]]
         seq = kmers_to_sequence(kmer_path)
-        t4 = timeit.default_timer()
-        decode_time = t4 - t3
+        kmer_path_list.append(kmer_path)
+        seq_list.append(seq)
+
+    decode_time = timeit.default_timer() - t3
+    decode_time_list = []
+    for x in xrange(len(fast5_list)):
+        decode_time_list.append(decode_time/len(fast5_list))
     
-        # Write events table
-        if write_events:
+    ret = []
+    # Write events table
+    if write_events:
+        for x in xrange(len(fast5_list)):
+            t4 = timeit.default_timer()
+            events = events_list[x]
+            name = name_list[x]
+            post = post_list[x]
+            kmer_path = kmer_path_list[x]
+            seq = seq_list[x]
+            states = states_list[x]
+            score = score_list[x]
+            good_events = good_events_list[x] 
             adder = AddFields(events[good_events])
             adder.add('model_state', kmer_path,
                 dtype='>S{}'.format(len(kmers[0])))
@@ -241,10 +266,9 @@ def process_read(modelfile, pa, min_prob=1e-5, trans=None, post_only=False, writ
                fh._add_string_dataset(
                    '@{}\n{}\n+\n{}\n'.format(name, seq, '!'*len(seq)),
                    fh._join_path(base, 'Fastq'))
-        t5 = timeit.default_timer()
-        write_time = t5 - t4
-    
-        ret.append((name, seq, score, len(post), (feature_time_list[x], load_time, network_time_list[x], decode_time, write_time)))
+ 
+            write_time = timeit.default_timer() - t4
+            ret.append((name, seq, score, len(post), (feature_time_list[x], load_time, network_time_list[x], decode_time_list[x], write_time)))
         
     return ret
 
