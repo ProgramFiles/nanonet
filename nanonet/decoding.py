@@ -92,6 +92,7 @@ def decode_profile_opencl(ctx, queue_list, post, trans=None, log=False, slip=0.0
     cl_trans = cl.Buffer(ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR, hostbuf=np.ravel(trans))
     state_seq = np.zeros(len(post), dtype=np.int32)
     cl_state_seq = cl.Buffer(ctx, cl.mem_flags.READ_WRITE, len(post)*state_seq.itemsize)
+    cl_pscore_max = cl.Buffer(ctx, cl.mem_flags.READ_WRITE, 1*post.itemsize)
 
     local_x = global_x = max_workgroup_size
     local_y = global_y = 1
@@ -105,14 +106,13 @@ def decode_profile_opencl(ctx, queue_list, post, trans=None, log=False, slip=0.0
     
     prg = cl.Program(ctx, kernel_code).build("-I. -Werror " + opencl_fptype_define + " -DWORK_ITEMS="+str(local_x)+" -DNUM_STATES="+str(post.shape[1]))
     
-    event = prg.decode(queue_list[0], (global_x, global_y), (local_x, local_y), np.int32(post.shape[0]), slip, cl_post, cl_trans, cl_state_seq)
-    event.wait()
+    prg.decode(queue_list[0], (global_x, global_y), (local_x, local_y), np.int32(post.shape[0]), slip, cl_post, cl_trans, cl_state_seq, cl_pscore_max)
     
-    out = np.zeros(1, dtype=fp_type)
-    cl.enqueue_copy(queue_list[0], out, cl_post)
+    pscore_max = np.zeros(1, dtype=fp_type)
+    cl.enqueue_copy(queue_list[0], pscore_max, cl_pscore_max)
     cl.enqueue_copy(queue_list[0], state_seq, cl_state_seq)
    
-    return out[0], state_seq
+    return pscore_max[0], state_seq
 
 def decode_transition(post, trans, log=False, slip=0.0):
     """  Viterbi-style decoding with weighted transitions
@@ -200,7 +200,8 @@ void decode(
     FPTYPE slip,
     __global FPTYPE* restrict post, 
     __global const FPTYPE* restrict trans,
-    __global int* restrict state_seq
+    __global int* restrict state_seq,
+    __global FPTYPE* restrict pscore_max
 ) {
     int local_id = get_local_id(0);
     int local_size = get_local_size(0);
@@ -321,7 +322,7 @@ void decode(
         state_seq[size-1] = iscore_new;
         for(int x = size; x > 1; --x)
             state_seq[x-2] = post[(x-2)*NUM_STATES + state_seq[x-1]];
-        post[0] = score_new; 
+        *pscore_max = score_new; 
     }
     
 }
