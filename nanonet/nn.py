@@ -313,6 +313,7 @@ class lstm_layer:
             for mat in inMat:
                 assert self.in_size() == mat.shape[1]
             iter = len(inMat)
+            is_nvidia = True if "nvidia" in ctx.get_info(cl.context_info.DEVICES)[0].get_info(cl.device_info.VENDOR).lower() else False
             
             outList = []
             for x in xrange(iter):
@@ -328,13 +329,19 @@ class lstm_layer:
                 opencl_fptype = "float"
                 opencl_fptype_suffix = "f"
             opencl_fptype_define = "-DFPTYPE="+opencl_fptype+" -DF="+opencl_fptype_suffix
+            is_nvidia_define = ""
+            if is_nvidia:
+                is_nvidia_define = " -DNVIDIA"
             prg = cl.Program(ctx, kernel_src).build("-I. -Werror " + opencl_fptype_define + " -DWORK_ITEMS="+str(self.out_size())+
-                " -DOUT_SIZE="+str(self.out_size())+" -DIN_MAT_Y="+str(inMat[x].shape[1]))
+                " -DOUT_SIZE="+str(self.out_size())+" -DIN_MAT_Y="+str(inMat[x].shape[1])+is_nvidia_define)
             
             inMatcList = []
             for x in xrange(iter):
                 inMatcList.append(inMat[x])
-            Wc = np.transpose(self.W, axes=[0,2,1])
+            if is_nvidia:
+                Wc = np.transpose(self.W, axes=[1,0,2])
+            else:
+                Wc = np.transpose(self.W, axes=[0,2,1])
             bc = self.b
             pc = self.p
             # Convert arrays if the types are different
@@ -541,10 +548,17 @@ void run_lstm_layer(
         for(int v2x = 0; v2x < V2_SIZE; ++v2x)
         {
             const FPTYPE v = v2[v2x];
+#ifdef NVIDIA
+            r[0] += v * Wtr[v2x*Wtry*Wtrz+(0*Wtrz)+id];
+            r[1] += v * Wtr[v2x*Wtry*Wtrz+(1*Wtrz)+id];  
+            r[2] += v * Wtr[v2x*Wtry*Wtrz+(2*Wtrz)+id];
+            r[3] += v * Wtr[v2x*Wtry*Wtrz+(3*Wtrz)+id];
+#else
             r[0] += v * Wtr[0*Wtry*Wtrz+(id*Wtrz)+v2x];
             r[1] += v * Wtr[1*Wtry*Wtrz+(id*Wtrz)+v2x];
             r[2] += v * Wtr[2*Wtry*Wtrz+(id*Wtrz)+v2x];
             r[3] += v * Wtr[3*Wtry*Wtrz+(id*Wtrz)+v2x];
+#endif
         }
         
         // Forget gate activation
