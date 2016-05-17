@@ -52,7 +52,7 @@ Nanonet contains an optional component to watch a filesystem for read files as
 they are produced by MinKnow. This feature is not installed by default. To
 install it run
 
-    pip install .[watcher]
+    pip install -e  .[watcher]
 
 from the source directory. This will allow use of the `--watch` option of the
 basecaller.
