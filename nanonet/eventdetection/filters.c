@@ -1,3 +1,5 @@
+#include <Python.h>
+
 #include <stddef.h>
 #include <math.h>
 #include <stdlib.h>
@@ -5,25 +7,33 @@
 #include <assert.h>
 #include <stdint.h>
 
-
 #define MODULE_API_EXPORTS
 #include "module.h"
 
-#include <Python.h>
 #include <stdlib.h>
 #include <float.h>
 #include <math.h>
 
 #include <filters.h>
 
+
 /**
- * For setuptools on windows. Since we aren't going the
- * python.h route we will still have to load this library via
- * ctypes, that's fine because we use ctypes for passing numpy
- * arrrays anyway. Note, the function name after "init" is tied
- * to the Extension name in setup.py
+ * setuptools install command doesn't play nice. We'll make this module
+ * importable as a python module but not export anything. Importing the 
+ * module as:
+ *     import nanonetfilters
+ * will at least allow us to find the file and continue to import it as
+ * a CDLL and wrap with ctypes. That's fine because it means we can pass
+ * numpy arrays as pointers and not worry about writing real python
+ * extensions.
 **/
-void initclib_nanonetfilters() {}
+static PyMethodDef FilterMethods[] = {
+    {NULL, NULL, 0, NULL}        /* Sentinel */
+};
+
+PyMODINIT_FUNC initnanonetfilters(void) {
+    (void) Py_InitModule("nanonetfilters", FilterMethods);
+}
 
 
 /**
@@ -276,4 +286,6 @@ MODULE_API void short_long_peak_detector(DetectorPtr short_detector, DetectorPtr
     }
   }
 }
+
+
 
