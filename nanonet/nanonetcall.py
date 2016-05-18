@@ -220,7 +220,7 @@ def main():
             'Profiling\n---------\n'
             'Feature generation: {:4.1f}\n'
             'Load network: {:4.1f}\n'
-            'Run network: {:6.1f} ({:6.3} kb/s, {:6.3} kev/s)\n'
+            'Run network: {:6.1f} ({:6.3f} kb/s, {:6.3f} kev/s)\n'
             'Decoding: {:6.1f} ({:6.3f} kb/s, {:6.3f} kev/s)\n'.format(
                 feature, load,
                 network, n_bases/1000.0/network, n_events/1000.0/network,
