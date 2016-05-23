@@ -33,7 +33,7 @@ def get_parser():
         description="""A simple RNN basecaller for Oxford Nanopore data.""",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    
+
     parser.add_argument("input", action=FileExist,
         help="A path to fast5 files.")
     parser.add_argument("--watch", default=None, type=int,
@@ -45,8 +45,8 @@ def get_parser():
 
     parser.add_argument("--output", type=str,
         help="Output name, output will be in fasta format.")
-    parser.add_argument("--write_fast5", action=AutoBool, default=False,
-        help="Write datasets to .fast5.")
+    parser.add_argument("--write_events", action=AutoBool, default=False,
+        help="Write event datasets to .fast5.")
     parser.add_argument("--strand_list", default=None, action=FileExist,
         help="List of reads to process.")
     parser.add_argument("--limit", default=None, type=int,
@@ -55,7 +55,7 @@ def get_parser():
         help="Min. read length (events) to basecall.")
     parser.add_argument("--max_len", default=15000, type=int,
         help="Max. read length (events) to basecall.")
-    
+
     parser.add_argument("--model", type=str, action=FileExist,
         default=pkg_resources.resource_filename('nanonet', 'data/default_template.npy'),
         help="Trained ANN.")
@@ -64,11 +64,13 @@ def get_parser():
 
     parser.add_argument("--trans", type=float, nargs=3, default=None,
         metavar=('stay', 'step', 'skip'), help='Base transition probabilities')
+    parser.add_argument("--fast_decode", action=AutoBool, default=False,
+        help="Use simple, fast decoder with no transition estimates.")
 
     return parser
 
 
-def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, write_events=True, **kwargs):
+def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, write_events=True, fast_decode=False, **kwargs):
     """Run neural network over a set of fast5 files
 
     :param modelfile: neural network specification.
@@ -116,8 +118,11 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, w
         return post
 
     post = min_prob + (1.0 - min_prob) * post
-    trans = decoding.estimate_transitions(post, trans=trans)
-    score, states = decoding.decode_profile(post, trans=np.log(__ETA__ + trans), log=False)
+    if fast_decode:
+        score, states = decoding.decode_homogenous(post, log=False)
+    else:
+        trans = decoding.estimate_transitions(post, trans=trans)
+        score, states = decoding.decode_profile(post, trans=np.log(__ETA__ + trans), log=False)
 
     # Form basecall
     kmer_path = [kmers[i] for i in states]
@@ -161,7 +166,7 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, w
                '@{}\n{}\n+\n{}\n'.format(name, seq, '!'*len(seq)),
                fh._join_path(base, 'Fastq'))
 
-    return (name, seq, score, len(post), (feature_time, load_time, network_time, decode_time))
+    return (name, seq, score, len(features), (feature_time, load_time, network_time, decode_time))
 
 
 def main():
@@ -180,13 +185,11 @@ def main():
     fix_args = [
         modelfile
     ]
-    fix_kwargs = {
-        'min_len':args.min_len,
-        'max_len':args.max_len,
-        'section':args.section,
-        'event_detect':args.event_detect,
-        'write_events':args.write_fast5,
-    }
+    fix_kwargs = {a: getattr(args, a) for a in ( 
+        'min_len', 'max_len', 'section',
+        'event_detect', 'fast_decode',
+        'write_events'
+    )}
 
 
     #TODO: handle case where there are pre-existing files.

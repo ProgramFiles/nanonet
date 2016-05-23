@@ -26,18 +26,30 @@ c_compile_args = [
     '-Wall', '-DNDEBUG', '-std=c99',
     '-fstrict-aliasing', '-O3', '-march=native'
 ]
+cpp_compile_args = [
+    a for a in c_compile_args if a != '-std=c99'
+]
 
 extensions = []
 
 eventdetect = os.path.join(os.path.dirname(__file__), 'nanonet', 'eventdetection')
-include_dirs=[eventdetect]
+decode = os.path.join(os.path.dirname(__file__), 'nanonet')
+
+include_dirs=[eventdetect, decode]
 if os.name == 'nt':
     include_dirs.append(os.path.join(eventdetect, 'include'))
+
 extensions.append(Extension(
     'nanonetfilters',
     sources=[os.path.join(eventdetect, 'filters.c')],
     include_dirs=include_dirs,
     extra_compile_args=c_compile_args
+))
+extensions.append(Extension(
+    'nanonetdecode',
+    sources=[os.path.join(decode, 'decoding.cpp')],
+    include_dirs=include_dirs,
+    extra_compile_args=cpp_compile_args
 ))
 
 requires=[

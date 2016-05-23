@@ -1,25 +1,11 @@
 import os
-import imp
 import numpy as np
 from numpy.ctypeslib import ndpointer
-from ctypes import cdll, c_double, c_bool, c_size_t, c_int, Structure, POINTER
+from ctypes import c_double, c_bool, c_size_t, c_int, Structure, POINTER
 
+from nanonet.util import get_shared_lib
 
-try:
-    # after 'python setup.py install' we should be able to do this
-    import nanonetfilters
-    lib_file = nanonetfilters.__file__
-except Exception as e:
-    try:
-        # after 'python setup.py develop' this should work
-        lib_file = imp.find_module('nanonetfilters')[1]
-    except Exception as e:
-        raise ImportError('Cannot locate C library for event detection.')
-    else:
-        lib_file = os.path.abspath(lib_file)
-finally:
-    nanonetfilters = cdll.LoadLibrary(lib_file)
-
+nanonetfilters = get_shared_lib('nanonetfilters')
 
 def compute_sum_sumsq(data):
     """Computer the cumulative sum and cumulative

@@ -1,5 +1,13 @@
 import itertools
 import numpy as np
+import os
+
+from numpy.ctypeslib import ndpointer
+from ctypes import c_double, c_size_t
+
+from nanonet.util import get_shared_lib
+
+nanonetdecode = get_shared_lib('nanonetdecode')
 
 _ETA = 1e-300
 _BASES = ['A', 'C', 'G', 'T']
@@ -90,6 +98,19 @@ def decode_simple(post, log=False, slip=0.0):
     return decode_profile(post, log=log, slip=slip)
 
 
+def decode_homogenous(post, log=False, n_bases=4):
+    if not log:
+        post = np.log(_ETA + post)
+
+    func = nanonetdecode.decode_path
+    func.restype = c_double
+    func.argtypes = [ndpointer(dtype='f8', flags='CONTIGUOUS'),
+                     c_size_t, c_size_t, c_size_t]
+    score = func(post, post.shape[0], n_bases, post.shape[1])
+    states = post[:,0].astype(int)
+    return score, states
+
+
 def estimate_transitions(post, trans=None):
     """  Naive estimate of transition behaviour from posteriors
     :param post: posterior probabilities of kmers by event.
@@ -114,4 +135,3 @@ def estimate_transitions(post, trans=None):
     res /= np.sum(res, axis=1).reshape((-1,1))
 
     return res
-
