@@ -43,7 +43,7 @@ extensions.append(Extension(
     extra_compile_args=c_compile_args
 ))
 extensions.append(Extension(
-    'clib_decoding',
+    'nanonetdecode',
     sources=[os.path.join(decode, 'decoding.cpp')],
     include_dirs=include_dirs,
     extra_compile_args=c_compile_args

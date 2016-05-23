@@ -7,11 +7,36 @@ from multiprocessing import Pool
 import random
 import string
 import math
+import importlib
+import imp
+from ctypes import cdll
 
 import numpy as np
 from numpy.lib import recfunctions as nprf
 
 __eta__ = 1e-100
+
+def get_shared_lib(name):
+    """Cross-platform resolution of shared-object libraries, working
+    around vagueries of setuptools
+    """
+    try:
+        # after 'python setup.py install' we should be able to do this
+        lib_file = importlib.import_module(name).__file__
+    except Exception as e:
+        try:
+            # after 'python setup.py develop' this should work
+            lib_file = imp.find_module(name)[1]
+        except Exception as e:
+            raise ImportError('Cannot locate C library for event detection.')
+        else:
+            lib_file = os.path.abspath(lib_file)
+    finally:
+        library = cdll.LoadLibrary(lib_file)
+    return library
+
+
+
 
 def all_nmers(n=3, alpha='ACGT'):
     return [''.join(x) for x in product(alpha, repeat=n)]
