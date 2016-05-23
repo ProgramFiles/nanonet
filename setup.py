@@ -30,12 +30,21 @@ c_compile_args = [
 extensions = []
 
 eventdetect = os.path.join(os.path.dirname(__file__), 'nanonet', 'eventdetection')
-include_dirs=[eventdetect]
+decode = os.path.join(os.path.dirname(__file__), 'nanonet')
+
+include_dirs=[eventdetect, decode]
 if os.name == 'nt':
     include_dirs.append(os.path.join(eventdetect, 'include'))
+
 extensions.append(Extension(
     'nanonetfilters',
     sources=[os.path.join(eventdetect, 'filters.c')],
+    include_dirs=include_dirs,
+    extra_compile_args=c_compile_args
+))
+extensions.append(Extension(
+    'clib_decoding',
+    sources=[os.path.join(decode, 'decoding.cpp')],
     include_dirs=include_dirs,
     extra_compile_args=c_compile_args
 ))

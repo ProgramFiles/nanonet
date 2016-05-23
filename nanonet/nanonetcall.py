@@ -33,7 +33,7 @@ def get_parser():
         description="""A simple RNN basecaller for Oxford Nanopore data.""",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    
+
     parser.add_argument("input", action=FileExist,
         help="A path to fast5 files.")
     parser.add_argument("--watch", default=None, type=int,
@@ -55,7 +55,7 @@ def get_parser():
         help="Min. read length (events) to basecall.")
     parser.add_argument("--max_len", default=15000, type=int,
         help="Max. read length (events) to basecall.")
-    
+
     parser.add_argument("--model", type=str, action=FileExist,
         default=pkg_resources.resource_filename('nanonet', 'data/default_template.npy'),
         help="Trained ANN.")
@@ -116,8 +116,10 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, w
         return post
 
     post = min_prob + (1.0 - min_prob) * post
-    trans = decoding.estimate_transitions(post, trans=trans)
-    score, states = decoding.decode_profile(post, trans=np.log(__ETA__ + trans), log=False)
+    #trans = decoding.estimate_transitions(post, trans=trans)
+    #score, states = decoding.decode_profile(post, trans=np.log(__ETA__ + trans), log=False)
+    #score, states = decoding.decode_simple(post, log=False)
+    score, states = decoding.decode_path_c(post, log=False)
 
     # Form basecall
     kmer_path = [kmers[i] for i in states]
@@ -161,7 +163,7 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, w
                '@{}\n{}\n+\n{}\n'.format(name, seq, '!'*len(seq)),
                fh._join_path(base, 'Fastq'))
 
-    return (name, seq, score, len(post), (feature_time, load_time, network_time, decode_time))
+    return (name, seq, score, len(features), (feature_time, load_time, network_time, decode_time))
 
 
 def main():
@@ -223,8 +225,8 @@ def main():
             'Run network: {} ({} kb/s, {} kev/s)\n'
             'Decoding: {} ({} kb/s, {} kev/s)\n'.format(
                 feature, load,
-                network, n_bases/1000/network, n_events/1000/network,
-                decoding, n_bases/1000/decoding, n_events/1000/decoding
+                network, n_bases/1000.0/network, n_events/1000.0/network,
+                decoding, n_bases/1000.0/decoding, n_events/1000.0/decoding
             )
         )
 
