@@ -26,6 +26,9 @@ c_compile_args = [
     '-Wall', '-DNDEBUG', '-std=c99',
     '-fstrict-aliasing', '-O3', '-march=native'
 ]
+cpp_compile_args = [
+    a for a in c_compile_args if a != '-std=c99'
+]
 
 extensions = []
 
@@ -46,7 +49,7 @@ extensions.append(Extension(
     'nanonetdecode',
     sources=[os.path.join(decode, 'decoding.cpp')],
     include_dirs=include_dirs,
-    extra_compile_args=c_compile_args
+    extra_compile_args=cpp_compile_args
 ))
 
 requires=[

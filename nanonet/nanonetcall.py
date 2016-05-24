@@ -220,12 +220,12 @@ def main():
     if n_reads > 0:
         feature, load, network, decoding = timings
         sys.stderr.write(
-            'Profiling\n---------\n'
-            'Feature generation: {}\n'
-            'Load network: {}\n'
-            'Run network: {} ({} kb/s, {} kev/s)\n'
-            'Decoding: {} ({} kb/s, {} kev/s)\n'.format(
-                feature, load,
+            #'Profiling\n---------\n'
+            #'Feature generation: {:4.1f}\n'
+            #'Load network: {:4.1f}\n'
+            'Run network: {:6.2f} ({:6.3f} kb/s, {:6.3f} kev/s)\n'
+            'Decoding:    {:6.2f} ({:6.3f} kb/s, {:6.3f} kev/s)\n'.format(
+                #feature, load,
                 network, n_bases/1000.0/network, n_events/1000.0/network,
                 decoding, n_bases/1000.0/decoding, n_events/1000.0/decoding
             )
