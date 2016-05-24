@@ -79,7 +79,7 @@ extern "C" void viterbi_update(
 }
 
 
-extern "C" double decode_path(ftype * logpost, const size_t num_events, const size_t num_bases, const size_t num_kmers){
+MODULE_API_EXPORTS extern "C" double decode_path(ftype * logpost, const size_t num_events, const size_t num_bases, const size_t num_kmers){
   assert(NULL!=logpost);
   assert(num_events>0);
   assert(num_bases>0);
