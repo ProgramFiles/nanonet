@@ -34,8 +34,9 @@ extensions = []
 
 eventdetect = os.path.join(os.path.dirname(__file__), 'nanonet', 'eventdetection')
 decode = os.path.join(os.path.dirname(__file__), 'nanonet')
+maths = os.path.join(os.path.dirname(__file__), 'nanonet', 'fastmath')
 
-include_dirs=[eventdetect, decode]
+include_dirs=[eventdetect, decode, maths]
 if os.name == 'nt':
     include_dirs.append(os.path.join(eventdetect, 'include'))
 
@@ -45,11 +46,20 @@ extensions.append(Extension(
     include_dirs=include_dirs,
     extra_compile_args=c_compile_args
 ))
+
+
 extensions.append(Extension(
     'nanonetdecode',
     sources=[os.path.join(decode, 'decoding.cpp')],
     include_dirs=include_dirs,
     extra_compile_args=cpp_compile_args
+))
+
+extensions.append(Extension(
+    'nanonetmaths',
+    sources=[os.path.join(maths, 'maths.c')],
+    include_dirs=include_dirs,
+    extra_compile_args=c_compile_args
 ))
 
 requires=[

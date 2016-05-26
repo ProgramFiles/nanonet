@@ -10,7 +10,6 @@
 #define MODULE_API_EXPORTS
 #include "module.h"
 
-#include <stdlib.h>
 #include <float.h>
 #include <math.h>
 

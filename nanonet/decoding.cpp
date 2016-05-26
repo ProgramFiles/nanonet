@@ -7,6 +7,7 @@
 
 #define MODULE_API_EXPORTS
 #include "module.h"
+#include "stdint.h"
 
 typedef double ftype;
 using namespace std;
@@ -79,7 +80,7 @@ extern "C" void viterbi_update(
 }
 
 
-MODULE_API_EXPORTS extern "C" double decode_path(ftype * logpost, const size_t num_events, const size_t num_bases, const size_t num_kmers){
+extern "C" MODULE_API double decode_path(ftype * logpost, const size_t num_events, const size_t num_bases, const size_t num_kmers){
   assert(NULL!=logpost);
   assert(num_events>0);
   assert(num_bases>0);
@@ -106,7 +107,7 @@ MODULE_API_EXPORTS extern "C" double decode_path(ftype * logpost, const size_t n
     const size_t idx2 = ev*num_kmers;
 
     viterbi_update(
-      vit_last.data(), vit_curr.data(), max_idx.data(),
+      &vit_last[0], &vit_curr[0], &max_idx[0], //.data() not supported on VSC++ for python,
       num_bases, num_kmers,
       stay, step, skip, slip
     );

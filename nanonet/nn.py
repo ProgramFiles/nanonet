@@ -1,6 +1,8 @@
 import abc
 import numpy as np
 
+from nanonet.fastmath import fast_tanh
+
 """Neural network layers and activation functions sufficient to run (but not
 train) a neural network.
 
@@ -8,10 +10,11 @@ train) a neural network.
 
 """
 
-dtype = np.float64
+dtype = np.float32
 
 def tanh(x):
     return np.tanh(x)
+    #return fast_tanh(x)
 
 def tanh_approx(x):
     """Pade approximation of tanh function
@@ -85,8 +88,13 @@ class FeedForward(Layer):
     def __init__(self, W, b=None, fun=tanh):
         assert b is None or len(b) == W.shape[1]
         self.b = np.zeros(W.shape[1], dtype=dtype) if b is None else b
-        self.W = W
+        self.W = W.astype(dtype)
         self.f = fun
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+        for attr in ('W', 'b'):
+            setattr(self, attr, getattr(self, attr).astype(dtype))
 
     @property
     def in_size(self):
@@ -113,7 +121,12 @@ class SoftMax(Layer):
     def __init__(self, W, b=None):
         assert b is None or len(b) == W.shape[1]
         self.b = np.zeros(W.shape[1], dtype=dtype) if b is None else b
-        self.W = W
+        self.W = W.astype(dtype)
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+        for attr in ('W', 'b'):
+            setattr(self, attr, getattr(self, attr).astype(dtype))
 
     @property
     def in_size(self):
@@ -147,10 +160,15 @@ class SimpleRNN(RNN):
         assert W.shape[0] > W.shape[1]
         assert b is None or len(b) == W.shape[1]
         self.b = np.zeros(W.shape[1], dtype=dtype) if b is None else b
-        self.W = W
+        self.W = W.astype(dtype)
 
         self.fun = fun
         self.size = W.shape[0] - W.shape[1]
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+        for attr in ('W', 'b'):
+            setattr(self, attr, getattr(self, attr).astype(dtype))
 
     @property
     def in_size(self):
@@ -208,11 +226,16 @@ class LSTM(RNN):
             p = np.zeros((3, size), dtype=dtype)
         assert p.shape == (3, size)
 
-        self.iW = np.ascontiguousarray(iW.transpose((1,0,2)).reshape((-1, 4 * size)))
-        self.lW = np.ascontiguousarray(lW.transpose((1,0,2)).reshape((size, 4 * size)))
-        self.b = np.ascontiguousarray(b).reshape(-1)
-        self.p = np.ascontiguousarray(p)
+        self.iW = np.ascontiguousarray(iW.transpose((1,0,2)).reshape((-1, 4 * size)), dtype=dtype)
+        self.lW = np.ascontiguousarray(lW.transpose((1,0,2)).reshape((size, 4 * size)), dtype=dtype)
+        self.b = np.ascontiguousarray(b, dtype=dtype).reshape(-1)
+        self.p = np.ascontiguousarray(p, dtype=dtype)
         self.isize = iW.shape[1]
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+        for attr in ('iW', 'lW', 'b', 'p'):
+            setattr(self, attr, getattr(self, attr).astype(dtype))
 
     @property
     def in_size(self):

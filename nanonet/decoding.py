@@ -5,11 +5,12 @@ import os
 from numpy.ctypeslib import ndpointer
 from ctypes import c_double, c_size_t
 
+from nanonet.nn import dtype
 from nanonet.util import get_shared_lib
 
 nanonetdecode = get_shared_lib('nanonetdecode')
 
-_ETA = 1e-300
+_ETA = np.finfo(dtype).tiny
 _BASES = ['A', 'C', 'G', 'T']
 _DIBASES = [b1 + b2 for b1 in _BASES for b2 in _BASES]
 _NSTEP = len(_BASES)
@@ -101,6 +102,7 @@ def decode_simple(post, log=False, slip=0.0):
 def decode_homogenous(post, log=False, n_bases=4):
     if not log:
         post = np.log(_ETA + post)
+    post = post.astype('f8')
 
     func = nanonetdecode.decode_path
     func.restype = c_double
