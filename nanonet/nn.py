@@ -314,6 +314,7 @@ class lstm_layer:
                 assert self.in_size() == mat.shape[1]
             iter = len(inMat)
             is_nvidia = True if "nvidia" in ctx.get_info(cl.context_info.DEVICES)[0].get_info(cl.device_info.VENDOR).lower() else False
+            is_intel = True if "intel" in ctx.get_info(cl.context_info.DEVICES)[0].get_info(cl.device_info.VENDOR).lower() else False
             
             outList = []
             for x in xrange(iter):
@@ -330,16 +331,21 @@ class lstm_layer:
                 opencl_fptype_suffix = "f"
             opencl_fptype_define = "-DFPTYPE="+opencl_fptype+" -DF="+opencl_fptype_suffix
             is_nvidia_define = ""
+            is_intel_define = ""
             if is_nvidia:
                 is_nvidia_define = " -DNVIDIA"
+            elif is_intel:
+                is_intel_define = " -DINTEL"
             prg = cl.Program(ctx, kernel_src).build("-I. -Werror " + opencl_fptype_define + " -DWORK_ITEMS="+str(self.out_size())+
-                " -DOUT_SIZE="+str(self.out_size())+" -DIN_MAT_Y="+str(inMat[x].shape[1])+is_nvidia_define)
+                " -DOUT_SIZE="+str(self.out_size())+" -DIN_MAT_Y="+str(inMat[x].shape[1])+is_nvidia_define+is_intel_define)
             
             inMatcList = []
             for x in xrange(iter):
                 inMatcList.append(inMat[x])
             if is_nvidia:
                 Wc = np.transpose(self.W, axes=[1,0,2])
+            elif is_intel:
+                Wc = self.W
             else:
                 Wc = np.transpose(self.W, axes=[0,2,1])
             bc = self.b
@@ -553,6 +559,11 @@ void run_lstm_layer(
             r[1] += v * Wtr[v2x*Wtry*Wtrz+(1*Wtrz)+id];  
             r[2] += v * Wtr[v2x*Wtry*Wtrz+(2*Wtrz)+id];
             r[3] += v * Wtr[v2x*Wtry*Wtrz+(3*Wtrz)+id];
+#elif INTEL
+            r[0] += v * Wtr[0*Wtry*Wtrz+(v2x*Wtrz)+id];
+            r[1] += v * Wtr[1*Wtry*Wtrz+(v2x*Wtrz)+id];  
+            r[2] += v * Wtr[2*Wtry*Wtrz+(v2x*Wtrz)+id];
+            r[3] += v * Wtr[3*Wtry*Wtrz+(v2x*Wtrz)+id];
 #else
             r[0] += v * Wtr[0*Wtry*Wtrz+(id*Wtrz)+v2x];
             r[1] += v * Wtr[1*Wtry*Wtrz+(id*Wtrz)+v2x];
