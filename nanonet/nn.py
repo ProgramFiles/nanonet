@@ -247,8 +247,7 @@ class LSTM(RNN):
 
     def step(self, in_vec, in_state):
         vW = in_vec.dot(self.iW)
-        out_prev = in_state[:self.size]
-        state = in_state[self.size:]
+        out_prev, state = in_state
         outW = out_prev.dot(self.lW)
         sumW = vW + outW  + self.b
         sumW = sumW.reshape((4, self.size))
@@ -259,17 +258,18 @@ class LSTM(RNN):
         state += tanh(sumW[0]) * sigmoid(sumW[1] + state * self.p[0])
         #  Output gate activation
         out = tanh(state) * sigmoid(sumW[3]  + state * self.p[2])
-        return np.concatenate((out, state))
+        return out, state
 
     def run(self, inMat):
         assert self.in_size == inMat.shape[1]
 
         out = np.zeros((inMat.shape[0], self.out_size), dtype=dtype)
-        state = np.zeros(2 * self.out_size, dtype=dtype)
+        out_prev = np.zeros(self.out_size, dtype=dtype)
+        state = np.zeros(self.out_size, dtype=dtype)
 
         for i, v in enumerate(inMat):
-            state = self.step(v, state)
-            out[i] = state[:self.out_size]
+            out_prev, state = self.step(v, (out_prev, state))
+            out[i] = out_prev
         return out
 
 
