@@ -108,7 +108,7 @@ class FeedForward(Layer):
 
 class SoftMax(Layer):
     """Softmax layer
-    
+
         tmp = exp(inmat W + b)
         out = row_normalise(tmp)
 
@@ -244,15 +244,15 @@ class LSTM(RNN):
 
     def step(self, in_vec, in_state):
         vW = in_vec.dot(self.iW)
-        out_prev, state = in_state
+        out_prev, prev_state = in_state
         outW = out_prev.dot(self.lW)
         sumW = vW + outW  + self.b
         sumW = sumW.reshape((4, self.size))
 
         #  Forget gate activation
-        state *= sigmoid(sumW[2] + state * self.p[1] )
+        state = prev_state * sigmoid(sumW[2] + prev_state * self.p[1] )
         #  Update state with input
-        state += tanh(sumW[0]) * sigmoid(sumW[1] + state * self.p[0])
+        state += tanh(sumW[0]) * sigmoid(sumW[1] + prev_state * self.p[0])
         #  Output gate activation
         out = tanh(state) * sigmoid(sumW[3]  + state * self.p[2])
         return out, state
