@@ -13,8 +13,6 @@ _tanh.argtypes = [
     ndpointer(dtype='f4', flags='CONTIGUOUS'),
     c_size_t
 ]
-from timeit import default_timer
-float_time = 0
 
 def fast_tanh(x):
     if not x.flags['OWNDATA']:
