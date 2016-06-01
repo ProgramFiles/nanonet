@@ -1,8 +1,6 @@
 import abc
 import numpy as np
 
-from nanonet.fastmath import fast_tanh
-
 """Neural network layers and activation functions sufficient to run (but not
 train) a neural network.
 
@@ -14,7 +12,6 @@ dtype = np.float32
 
 def tanh(x):
     return np.tanh(x)
-    #return fast_tanh(x)
 
 def tanh_approx(x):
     """Pade approximation of tanh function

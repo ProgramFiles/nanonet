@@ -55,13 +55,6 @@ extensions.append(Extension(
     extra_compile_args=cpp_compile_args
 ))
 
-extensions.append(Extension(
-    'nanonetmaths',
-    sources=[os.path.join(maths, 'maths.c')],
-    include_dirs=include_dirs,
-    extra_compile_args=c_compile_args
-))
-
 requires=[
     'h5py',
     'numpy',
