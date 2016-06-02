@@ -43,6 +43,7 @@ extensions.append(Extension(
 requires=[
     'h5py',
     'numpy',
+    'pyopencl',
 ]
 extra_requires = {
     'currennt': ['netCDF4'],
