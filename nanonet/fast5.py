@@ -931,7 +931,7 @@ class Fast5(h5py.File):
             raise ValueError('Could not retrieve sequence data from {}'.format(location))
 
 
-def iterate_fast5(path, strand_list=None, paths=False, mode='r', limit=None, files_group_pattern=None):
+def iterate_fast5(path, strand_list=None, paths=False, mode='r', limit=None, files_group_pattern=None, sort_by_size=None):
     """Iterate over directory or list of .fast5 files.
 
     :param path: Directory in which single read fast5 are located or filename.
@@ -940,6 +940,7 @@ def iterate_fast5(path, strand_list=None, paths=False, mode='r', limit=None, fil
     :param mode: mode for opening files.
     :param limit: limit number of files to consider.
     :param files_group_pattern: yield file paths in groups of specified pattern
+    :param sort_by_size: 'desc' - from largest to smallest, 'asc' - opposite
     """
     if strand_list is None:
         #  Could make glob more specific to filename pattern expected
@@ -955,18 +956,20 @@ def iterate_fast5(path, strand_list=None, paths=False, mode='r', limit=None, fil
     else:
         files = [os.path.join(path, x) for x in strand_list]
     
-    # Re-populate list with filename, size tuples
-    for i in xrange(len(files)):
-        files[i] = (files[i], os.path.getsize(files[i]))
+    if sort_by_size is not None: 
+        # Re-populate list with filename, size tuples
+        for i in xrange(len(files)):
+            files[i] = (files[i], os.path.getsize(files[i]))
+            
+        # Sort list by file size
+        # If reverse=True sort from largest to smallest
+        # If reverse=False sort from smallest to largest
+        reverse = True if sort_by_size == 'desc' else False 
+        files.sort(key=lambda filename: filename[1], reverse=reverse)
         
-    # Sort list by file size
-    # If reverse=True sort from largest to smallest
-    # If reverse=False sort from smallest to largest
-    files.sort(key=lambda filename: filename[1], reverse=True)
-    
-    # Re-populate list with just filenames
-    for i in xrange(len(files)):
-        files[i] = files[i][0]
+        # Re-populate list with just filenames
+        for i in xrange(len(files)):
+            files[i] = files[i][0]
     
     list = []
     cnt = 0    

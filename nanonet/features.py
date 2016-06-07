@@ -75,73 +75,6 @@ def events_to_features(events, window=[-1, 0, 1]):
     return X
 
 
-def make_currennt_basecall_input_multi(fast5_files, netcdf_file, section='template', window=[-1, 0, 1], num_kmers=64, trim=10, min_len=1000, max_len=9000):
-    """Prepare a .netcdf file for input to currennt from .fast5 files.
-
-    :param fast5_files: list of .fast5 files to process
-    :param netcdf_file: output .netcdf file
-    :param section: template or complement
-    :param window: event window to derive features
-    :param num_kmers: no. of (true) kmers in model
-    :param trim: no. of feature vectors to trim (from either end)
-    :param min_len: minimum length of read to consider
-    :param max_len: maximum length of read to consider
-    """
-    from netCDF4 import Dataset
-
-    # We need to know ahead of time how wide our feature vector is,
-    #    lets generate one and take a peek.
-    with Fast5(fast5_files[0]) as fh:
-        ev = fh.get_read()
-    X = events_to_features(ev, window=window)
-    inputPattSize = X.shape[1]
-
-    reads_written = 0
-    with Dataset(netcdf_file, 'w', format='NETCDF4') as ncroot:
-        # Set dimensions
-        ncroot.createDimension('numSeqs', None)
-        ncroot.createDimension('numLabels', num_kmers + 1)
-        ncroot.createDimension('maxSeqTagLength', 500)
-        ncroot.createDimension('numTimesteps', None)
-        ncroot.createDimension('inputPattSize', inputPattSize)
-        
-        # Set variables
-        seqTags = ncroot.createVariable('seqTags', 'S1', ('numSeqs', 'maxSeqTagLength'))
-        seqLengths = ncroot.createVariable('seqLengths', 'i4', ('numSeqs',))
-        inputs = ncroot.createVariable('inputs', 'f4', ('numTimesteps', 'inputPattSize'))
-        targetClasses = ncroot.createVariable('targetClasses', 'i4', ('numTimesteps',))
-
-        for f in fast5_files:
-            filename = os.path.basename(f)
-            with Fast5(f) as fh:
-                events, _ = segment_wrapper(fh, section=section)
-            try:
-                X = events_to_features(events, window=window)
-            except TypeError:
-                continue
-            try:
-                X = X[trim:-trim]
-            except:
-                continue
-            else:
-                if len(X) < min_len or len(X) > max_len:
-                    continue
-
-            reads_written += 1
-            numTimesteps = X.shape[0]             
-            _seqTags = np.zeros(500, dtype = "S1")
-            _seqTags[:len(filename)] = list(filename)
-            # Assign values to variables for each input file
-            curr_numSeqs = len(ncroot.dimensions["numSeqs"])
-            curr_numTimesteps = len(ncroot.dimensions["numTimesteps"])
-            
-            seqTags[curr_numSeqs] = _seqTags
-            seqLengths[curr_numSeqs] = numTimesteps
-            inputs[curr_numTimesteps:] = X
-
-    return reads_written
-
-
 def make_basecall_input_multi(fast5_files, section='template', window=[-1, 0, 1], trim=10, min_len=1000, max_len=9000, event_detect=True):
     """Like the above, but doesn't yields directly events. The point here is to
     be fully consistent with the currennt interface but allow use of the python
@@ -215,13 +148,16 @@ def get_labels_ont_mapping(filename, kmer_len=3, section='template'):
                 'kmers in mapping file are {}mers, but requested {}mers.'.format(
                 base_kmer_len, kmer_len
             ))
-        k1 = len(events['kmer'][0])/2 - kmer_len/2 - 1
-        k2 = k1 + kmer_len
-        y = np.fromiter(
-            (k[k1:k2] for k in events['kmer']),
-            dtype='>S{}'.format(kmer_len),
-            count = len(events)
-        )
+        if base_kmer_len == kmer_len:
+            y = events['kmer']
+        else:
+            k1 = base_kmer_len/2 - kmer_len/2 - 1
+            k2 = k1 + kmer_len
+            y = np.fromiter(
+                (k[k1:k2] for k in events['kmer']),
+                dtype='>S{}'.format(kmer_len),
+                count = len(events)
+            )
         y[~events['good_emission']] = bad_kmer
     return y
 
@@ -296,11 +232,11 @@ def make_currennt_training_input_multi(fast5_files, netcdf_file, window=[-1, 0, 
                     (all_kmers[k] for k in labels),
                     dtype=np.int16, count=len(labels)
                 )
-            except:
+            except Exception as e:
                 # Checks for erroneous alphabet or kmer length
                 raise RuntimeError(
                     'Could not convert kmer labels to ints in file {}. '
-                    'Check labels are no longer than {} and contain only {}'.format(f, kmer_len, alpha)
+                    'Check labels are no longer than {} and contain only {}'.format(f, kmer_len, alphabet)
                 )
             else:
                 print "Adding: {}".format(f)
@@ -336,7 +272,7 @@ class SquiggleFeatureGenerator(object):
             The order in which the feature adding methods is called should be the
             same for both training and basecalling.
         """
-        self.events = events
+        self.events = np.copy(events)
         self.labels = labels
         self.features = {}
         self.feature_order = []
@@ -346,7 +282,7 @@ class SquiggleFeatureGenerator(object):
             scale_array(self.events[field], copy=False)
         delta = np.ediff1d(self.events['mean'], to_begin=0)
         scale_array(delta, with_mean=False, copy = False)
-        self.events = nprf.append_fields(events, 'delta', delta)
+        self.events = nprf.append_fields(self.events, 'delta', delta)
  
     def to_numpy(self):
         out = np.empty((len(self.events), len(self.feature_order)))

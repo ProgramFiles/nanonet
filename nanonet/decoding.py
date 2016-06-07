@@ -1,12 +1,24 @@
 import itertools
 import numpy as np
+import os
 import pyopencl as cl
 
-_ETA = 1e-300
+
+from numpy.ctypeslib import ndpointer
+from ctypes import c_double, c_size_t
+
+from nanonet.nn import dtype
+from nanonet.util import get_shared_lib
+
+nanonetdecode = get_shared_lib('nanonetdecode')
+
+_ETA = np.finfo(dtype).tiny
 _BASES = ['A', 'C', 'G', 'T']
 _DIBASES = [b1 + b2 for b1 in _BASES for b2 in _BASES]
 _NSTEP = len(_BASES)
 _NSKIP = _NSTEP ** 2
+_STEP_FACTOR = np.log(_NSTEP)
+_SKIP_FACTOR = np.log(_NSKIP)
 
 
 def decode_profile(post, trans=None, log=False, slip=0.0):
@@ -25,6 +37,10 @@ def decode_profile(post, trans=None, log=False, slip=0.0):
     
     if trans is None:
         trans = itertools.repeat(np.zeros(3))
+    else:
+        trans = np.copy(trans)
+        trans[:,1] -= _STEP_FACTOR
+        trans[:,2] -= _SKIP_FACTOR
 
     log_slip = np.log(_ETA + slip)
 
@@ -81,6 +97,13 @@ def decode_profile_opencl(ctx, queue_list, post_list, trans_list=None, log=False
     if trans_list is None:
         for x in xrange(iter):
             trans_list.append(itertools.repeat(np.zeros(3)))
+    else:
+        for x in xrange(iter):
+            trans = trans_list[x]
+            trans = np.copy(trans)
+            trans[:,1] -= _STEP_FACTOR
+            trans[:,2] -= _SKIP_FACTOR
+            trans_list[x] = trans
     
     lpostList = []
     if fp_type == np.float32:
@@ -145,6 +168,20 @@ def decode_simple(post, log=False, slip=0.0):
     :param log: Posterior probabilities are in log-space.
     """
     return decode_profile(post, log=log, slip=slip)
+
+
+def decode_homogenous(post, log=False, n_bases=4):
+    if not log:
+        post = np.log(_ETA + post)
+    post = post.astype('f8')
+
+    func = nanonetdecode.decode_path
+    func.restype = c_double
+    func.argtypes = [ndpointer(dtype='f8', flags='CONTIGUOUS'),
+                     c_size_t, c_size_t, c_size_t]
+    score = func(post, post.shape[0], n_bases, post.shape[1])
+    states = post[:,0].astype(int)
+    return score, states
 
 
 def estimate_transitions(post, trans=None):

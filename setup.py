@@ -21,23 +21,38 @@ if mo:
     version = mo.group(1)
 else:
     raise RuntimeError('Unable to find version string in "nanonet/__init__.py".')
-    
+
 c_compile_args = [
     '-Wall', '-DNDEBUG', '-std=c99',
     '-fstrict-aliasing', '-O3', '-march=native'
+]
+cpp_compile_args = [
+    a for a in c_compile_args if a != '-std=c99'
 ]
 
 extensions = []
 
 eventdetect = os.path.join(os.path.dirname(__file__), 'nanonet', 'eventdetection')
-include_dirs=[eventdetect]
+decode = os.path.join(os.path.dirname(__file__), 'nanonet')
+maths = os.path.join(os.path.dirname(__file__), 'nanonet', 'fastmath')
+
+include_dirs=[eventdetect, decode, maths]
 if os.name == 'nt':
     include_dirs.append(os.path.join(eventdetect, 'include'))
+
 extensions.append(Extension(
-    'clib_nanonetfilters',
+    'nanonetfilters',
     sources=[os.path.join(eventdetect, 'filters.c')],
     include_dirs=include_dirs,
     extra_compile_args=c_compile_args
+))
+
+
+extensions.append(Extension(
+    'nanonetdecode',
+    sources=[os.path.join(decode, 'decoding.cpp')],
+    include_dirs=include_dirs,
+    extra_compile_args=cpp_compile_args
 ))
 
 requires=[
@@ -66,7 +81,7 @@ setup(
     dependency_links=[],
     zip_safe=True,
     ext_modules=extensions,
-    #test_suite='discover_tests',
+    test_suite='discover_tests',
     entry_points={
         'console_scripts': [
             'nanonetcall = nanonet.nanonetcall:main',

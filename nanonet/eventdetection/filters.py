@@ -1,23 +1,11 @@
 import os
-import imp
 import numpy as np
 from numpy.ctypeslib import ndpointer
-from ctypes import cdll, c_double, c_bool, c_size_t, c_int, Structure, POINTER
+from ctypes import c_double, c_bool, c_size_t, c_int, Structure, POINTER
 
+from nanonet.util import get_shared_lib
 
-try:
-    # after 'python setup.py install' we should be able to do this
-    import clib_nanonetfilters
-except:
-    try:
-        # after 'python setup.py develop' this should work
-        lib_file = imp.find_module('clib_nanonetfilters')[1]
-    except Exception as e:
-        raise ImportError('Cannot locate C library for event detection.')
-    else:
-        lib_file = os.path.abspath(lib_file)
-        clib_filters = cdll.LoadLibrary(lib_file)
-
+nanonetfilters = get_shared_lib('nanonetfilters')
 
 def compute_sum_sumsq(data):
     """Computer the cumulative sum and cumulative
@@ -33,7 +21,7 @@ def compute_sum_sumsq(data):
         >>> (array([ 1.,  3.,  6.]), array([  1.,   5.,  14.]))
  
     """
-    f = clib_filters.compute_sum_sumsq
+    f = nanonetfilters.compute_sum_sumsq
     f.restype = None
     f.argtypes = [
         ndpointer(dtype='f8', flags='CONTIGUOUS'),
@@ -57,7 +45,7 @@ def compute_mave(sums, w_len):
 
     :returns: 1D :class:`numpy.array` moving average
     """
-    f = clib_filters.compute_mave
+    f = nanonetfilters.compute_mave
     f.restype = None
     f.argtypes = [
         ndpointer(dtype='f8', flags='CONTIGUOUS'),
@@ -83,7 +71,7 @@ def compute_tstat(sums, sumsqs, w_len, pooled_var = False):
 
     :returns: 1D :class:`numpy.array` of t-statistics
     """
-    f = clib_filters.compute_tstat
+    f = nanonetfilters.compute_tstat
     f.restype = None
     f.argtypes = [
         ndpointer(dtype='f8', flags='CONTIGUOUS'),
@@ -110,7 +98,7 @@ def compute_deltamean(sums, sumsqs, w_len):
 
     :returns: 1D :class:`numpy.array` of t-statistics
     """
-    f = clib_filters.compute_deltamean
+    f = nanonetfilters.compute_deltamean
     f.restype = None
     f.argtypes = [
         ndpointer(dtype='f8', flags='CONTIGUOUS'),
@@ -240,7 +228,7 @@ def short_long_peak_detector(t_stats, thresholds, window_lengths, peak_height):
     if detectors[0].window_length > detectors[1].window_length:
         detectors = detectors[::-1]
 
-    f = clib_filters.short_long_peak_detector
+    f = nanonetfilters.short_long_peak_detector
     f.restype = None
     f.argtypes = [POINTER(Detector), POINTER(Detector), c_double, ndpointer(dtype=c_size_t, flags='CONTIGUOUS')]
     peaks = np.zeros(len(detectors[0].signal), dtype=c_size_t)

@@ -31,10 +31,10 @@ __ETA__ = 1e-300
 
 def get_parser():
     parser = argparse.ArgumentParser(
-        description="""A simple ANN 3-mer basecaller, works only on HMM basecall mapped data.""",
+        description="""A simple RNN basecaller for Oxford Nanopore data.""",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    
+
     parser.add_argument("input", action=FileExist,
         help="A path to fast5 files.")
     parser.add_argument("--watch", default=None, type=int,
@@ -46,8 +46,8 @@ def get_parser():
 
     parser.add_argument("--output", type=str,
         help="Output name, output will be in fasta format.")
-    parser.add_argument("--write_fast5", action=AutoBool, default=False,
-        help="Write datasets to .fast5.")
+    parser.add_argument("--write_events", action=AutoBool, default=False,
+        help="Write event datasets to .fast5.")
     parser.add_argument("--strand_list", default=None, action=FileExist,
         help="List of reads to process.")
     parser.add_argument("--limit", default=None, type=int,
@@ -56,15 +56,17 @@ def get_parser():
         help="Min. read length (events) to basecall.")
     parser.add_argument("--max_len", default=15000, type=int,
         help="Max. read length (events) to basecall.")
-    
+
     parser.add_argument("--model", type=str, action=FileExist,
         default=pkg_resources.resource_filename('nanonet', 'data/default_template.npy'),
         help="Trained ANN.")
-    parser.add_argument("--jobs", default=1, type=int,
+    parser.add_argument("--jobs", default=1, type=int, action=CheckCPU,
         help="No of decoding jobs to run in parallel.")
 
     parser.add_argument("--trans", type=float, nargs=3, default=None,
         metavar=('stay', 'step', 'skip'), help='Base transition probabilities')
+    parser.add_argument("--fast_decode", action=AutoBool, default=False,
+        help="Use simple, fast decoder with no transition estimates.")
 
     parser.add_argument("--opencl", action=AutoBool, default=False,
         help="Offload computation to GPU using OpenCL.")
@@ -103,7 +105,7 @@ def list_opencl_platforms():
             print('    Device - Global Memory: {0:.0f} GB'.format(device.global_mem_size/1073741824.0))
     print('\n')
         
-def process_read(modelfile, pa, min_prob=1e-5, trans=None, post_only=False, write_events=True, **kwargs):
+def process_read(modelfile, pa, min_prob=1e-5, trans=None, post_only=False, write_events=True, fast_decode=False, **kwargs):
     """Run neural network over a set of fast5 files
 
     :param modelfile: neural network specification.
@@ -137,7 +139,7 @@ def process_read(modelfile, pa, min_prob=1e-5, trans=None, post_only=False, writ
                 events_list.append(events)
             else:
                 name, features, _ = it.next()
-            features_list.append(features.astype(nn.tang_nn_type))
+            features_list.append(features.astype(nn.dtype))
             name_list.append(name)
         except Exception as e:
             return None
@@ -145,7 +147,7 @@ def process_read(modelfile, pa, min_prob=1e-5, trans=None, post_only=False, writ
         feature_time_list.append(t2 - t1)
     
         if not use_opencl:
-            post = network.run(features.astype(nn.tang_nn_type))
+            post = network.run(features.astype(nn.dtype))
             post_list.append(post)
             t3 = timeit.default_timer()
             network_time_list.append(t3 - t2)
@@ -173,6 +175,8 @@ def process_read(modelfile, pa, min_prob=1e-5, trans=None, post_only=False, writ
     trans_list = []
     good_events_list = []
     t3 = timeit.default_timer()
+    score_list = [None] * len(fast5_list)
+    states_list = [None] * len(fast5_list)
     for x in xrange(len(fast5_list)):
         post = post_list[x]
         trans = trans_copy
@@ -195,16 +199,17 @@ def process_read(modelfile, pa, min_prob=1e-5, trans=None, post_only=False, writ
     
         post = min_prob + (1.0 - min_prob) * post
         post_list[x] = post
-        trans = decoding.estimate_transitions(post, trans=trans)
-        trans_list.append(np.log(__ETA__ + trans))
+        if fast_decode:
+            score_list[x], states_list[x] = decoding.decode_homogenous(post_list[x], log=False)
+        else:
+            trans = decoding.estimate_transitions(post_list[x], trans=trans)
+            if use_opencl:
+                trans_list.append(np.log(__ETA__ + trans))    
+            else:
+                score_list[x], states_list[x] = decoding.decode_profile(post_list[x], trans=np.log(__ETA__ + trans), log=False)
     
-    if use_opencl:
+    if not fast_decode and use_opencl:
         score_list, states_list = decoding.decode_profile_opencl(ctx, queue_list, post_list, trans_list=trans_list, log=False, max_workgroup_size=max_workgroup_size)
-    else:
-        score_list = [None] * len(fast5_list)
-        states_list = [None] * len(fast5_list)
-        for x in xrange(len(fast5_list)):
-            score_list[x], states_list[x] = decoding.decode_profile(post_list[x], trans=trans_list[x], log=False)
             
     # Form basecall
     kmer_path_list = []
@@ -221,6 +226,7 @@ def process_read(modelfile, pa, min_prob=1e-5, trans=None, post_only=False, writ
         decode_time_list.append(decode_time/len(fast5_list))
     
     ret = []
+    write_time_list = [0] * len(fast5_list)
     # Write events table
     if write_events:
         for x in xrange(len(fast5_list)):
@@ -231,7 +237,6 @@ def process_read(modelfile, pa, min_prob=1e-5, trans=None, post_only=False, writ
             kmer_path = kmer_path_list[x]
             seq = seq_list[x]
             states = states_list[x]
-            score = score_list[x]
             good_events = good_events_list[x] 
             adder = AddFields(events[good_events])
             adder.add('model_state', kmer_path,
@@ -267,9 +272,10 @@ def process_read(modelfile, pa, min_prob=1e-5, trans=None, post_only=False, writ
                    '@{}\n{}\n+\n{}\n'.format(name, seq, '!'*len(seq)),
                    fh._join_path(base, 'Fastq'))
  
-            write_time = timeit.default_timer() - t4
-            ret.append((name, seq, score, len(post), (feature_time_list[x], load_time, network_time_list[x], decode_time_list[x], write_time)))
-        
+            write_time_list[x] = timeit.default_timer() - t4
+    
+    for x in xrange(len(fast5_list)):
+        ret.append((name, seq, score_list[x], len(features), (feature_time_list[x], load_time, network_time_list[x], decode_time_list[x], write_time_list[x])))
     return ret
 
 def main():
@@ -292,17 +298,18 @@ def main():
     fix_args = [
         modelfile
     ]
-    fix_kwargs = {
-        'min_len':args.min_len,
-        'max_len':args.max_len,
-        'section':args.section,
-        'event_detect':args.event_detect
-    }
+    fix_kwargs = {a: getattr(args, a) for a in ( 
+        'min_len', 'max_len', 'section',
+        'event_detect', 'fast_decode',
+        'write_events'
+    )}
 
     files_pattern = [1] * args.jobs
+    sort_by_size = None
     if args.opencl:
         for x in xrange(len(args.platforms)):
             files_pattern[x] = args.opencl_input_files
+        sort_by_size = 'desc'
             
     #TODO: handle case where there are pre-existing files.
     if args.watch is not None:
@@ -310,7 +317,7 @@ def main():
         from nanonet.watcher import Fast5Watcher
         fast5_files = Fast5Watcher(args.input, timeout=args.watch)
     else:                                                                                                                                 
-        fast5_files = iterate_fast5(args.input, paths=True, strand_list=args.strand_list, limit=args.limit, files_group_pattern=files_pattern)
+        fast5_files = iterate_fast5(args.input, paths=True, strand_list=args.strand_list, limit=args.limit, files_group_pattern=files_pattern, sort_by_size=sort_by_size)
 
     pa_list = []
     for i,ff in enumerate(fast5_files):
@@ -346,16 +353,17 @@ def main():
         decoding /= args.jobs
         events_writing /= args.jobs
         sys.stderr.write(
-            'Profiling\n---------\n'
-            'Feature generation: {}\n'
-            'Load network: {}\n'
-            'Run network: {} ({} kb/s, {} kev/s)\n'
-            'Decoding: {} ({} kb/s, {} kev/s)\n'
-            'Write events: {}\n'.format(
-                feature, load,
-                network, n_bases/1000/network, n_events/1000/network,
-                decoding, n_bases/1000/decoding, n_events/1000/decoding,
-                events_writing
+            #'Profiling\n---------\n'
+            #'Feature generation: {:4.1f}\n'
+            #'Load network: {:4.1f}\n'
+            'Run network: {:6.2f} ({:6.3f} kb/s, {:6.3f} kev/s)\n'
+            'Decoding:    {:6.2f} ({:6.3f} kb/s, {:6.3f} kev/s)\n'
+            #'Write events: {:6.2f}\n'
+            .format(
+                #feature, load,
+                network, n_bases/1000.0/network, n_events/1000.0/network,
+                decoding, n_bases/1000.0/decoding, n_events/1000.0/decoding,
+                #events_writing
             )
         )
 
