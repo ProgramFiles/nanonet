@@ -7,7 +7,7 @@ import pyopencl as cl
 from numpy.ctypeslib import ndpointer
 from ctypes import c_double, c_size_t
 
-from nanonet.nn import dtype
+from nanonet.nn import dtype, build_program
 from nanonet.util import get_shared_lib
 
 nanonetdecode = get_shared_lib('nanonetdecode')
@@ -132,15 +132,11 @@ def decode_profile_opencl(ctx, queue_list, post_list, trans_list=None, log=False
     local_x = global_x = max_workgroup_size
     local_y = global_y = 1
     
-    opencl_fptype = "double"
-    opencl_fptype_suffix = ""
-    if fp_type == np.float32:
-        opencl_fptype = "float"
-        opencl_fptype_suffix = "f"
-    opencl_fptype_define = "-DFPTYPE="+opencl_fptype+" -DF="+opencl_fptype_suffix
-    
-    prg = cl.Program(ctx, kernel_code).build("-I. -Werror " + opencl_fptype_define + " -DWORK_ITEMS="+str(local_x)+" -DNUM_STATES="+str(lpostList[0].shape[1]))
-    
+    prg = build_program(ctx, kernel_code, extra=
+    " -DWORK_ITEMS={} -DNUM_STATES={}".format(
+        local_x, lpostList[0].shape[1]
+    ))
+
     for x in xrange(iter):
         prg.decode(queue_list[x], (global_x, global_y), (local_x, local_y), np.int32(lpostList[x].shape[0]), slip, cl_postList[x], cl_transList[x], cl_state_seqList[x], cl_pscore_maxList[x])
         queue_list[x].flush()

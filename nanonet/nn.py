@@ -103,60 +103,60 @@ class FeedForward(Layer):
         return self.W.shape[1]
 
     def run(self, inMat, ctx=None, queueList=None):
-        if not queueList:
+        if queueList is not None:
+            return self._run_opencl(inMat, ctx, queueList)
+        else:
             assert self.in_size == inMat.shape[1]
             return self.f(inMat.dot(self.W) + self.b)
-        else:
-            for mat in inMat:
-                assert self.in_size == mat.shape[1]
-            iter = len(inMat)
-            
-            fp_type = dtype
-            kernel_src = kernel_code_feedforward
-            
-            # Calculate work items 
-            local_x = 256
-            local_y = 1
-            global_x_list = []
-            for mat in inMat:
-                global_x = mat.shape[0]
-                if global_x % local_x:
-                    global_x = (global_x / local_x + 1) * local_x 
-                global_x_list.append(global_x)
-            global_y = 1
-            
-            # Build the kernel (builds for the first time, then uses cached version)
-            opencl_fptype = "double"
-            opencl_fptype_suffix = ""
-            if fp_type == np.float32:
-                opencl_fptype = "float"
-                opencl_fptype_suffix = "f"
-            opencl_fptype_define = "-DFPTYPE="+opencl_fptype+" -DF="+opencl_fptype_suffix
-            prg = cl.Program(ctx, kernel_src).build("-I. -Werror " + opencl_fptype_define + " -DWORK_ITEMS="+str(local_x)+" -DIN_MAT_Y="+str(inMat[0].shape[1]))
-            
-            Wtr = np.transpose(self.W)
-            
-            # Allocate OpenCL buffers    
-            cl_inMatList = []
-            for x in xrange(iter):
-                cl_inMatList.append(cl.Buffer(ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR, hostbuf=np.ravel(inMat[x])))
-            cl_W = cl.Buffer(ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR, hostbuf=np.ravel(Wtr))
-            cl_b = cl.Buffer(ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR, hostbuf=np.ravel(self.b))
-            cl_outList = []
-            for x in xrange(iter):
-                cl_outList.append(cl.Buffer(ctx, cl.mem_flags.WRITE_ONLY, inMat[x].shape[0]*self.W.shape[1]*inMat[x].itemsize))
 
-            # Run the kernel
-            for x in xrange(iter):
-                prg.run_layer(queueList[x], (global_x_list[x], global_y), (local_x, local_y), np.int32(inMat[x].shape[0]), np.int32(Wtr.shape[0]), cl_inMatList[x], cl_W, cl_b, cl_outList[x])
-                queueList[x].flush()
-            
-            # Copy results back to host (blocking call)
-            outList = []
-            for x in xrange(iter):
-                outList.append(np.zeros((inMat[x].shape[0],self.W.shape[1]), dtype=dtype))
-                cl.enqueue_copy(queueList[x], outList[x], cl_outList[x])
-            return outList
+    def _run_opencl(self, inMat, ctx, queueList):
+        for mat in inMat:
+            assert self.in_size == mat.shape[1]
+        iter = len(inMat)
+        
+        kernel_src = kernel_code_feedforward
+        
+        # Calculate work items 
+        local_x = 256
+        local_y = 1
+        global_x_list = []
+        for mat in inMat:
+            global_x = mat.shape[0]
+            if global_x % local_x:
+                global_x = (global_x / local_x + 1) * local_x 
+            global_x_list.append(global_x)
+        global_y = 1
+        
+        # Build the kernel (builds for the first time, then uses cached version)
+        prg = build_program(ctx, kernel_src, extra=
+            "-DWORK_ITEMS={} -DIN_MAT_Y={}".format(
+            local_x, inMat[0].shape[1]
+        ))
+
+        Wtr = np.transpose(self.W)
+        
+        # Allocate OpenCL buffers    
+        cl_inMatList = []
+        buffer_flags = cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR
+        for x in xrange(iter):
+            cl_inMatList.append(cl.Buffer(ctx, buffer_flags, hostbuf=np.ravel(inMat[x])))
+        cl_W = cl.Buffer(ctx, buffer_flags, hostbuf=np.ravel(Wtr))
+        cl_b = cl.Buffer(ctx, buffer_flags, hostbuf=np.ravel(self.b))
+        cl_outList = []
+        for x in xrange(iter):
+            cl_outList.append(cl.Buffer(ctx, cl.mem_flags.WRITE_ONLY, inMat[x].shape[0]*self.W.shape[1]*inMat[x].itemsize))
+
+        # Run the kernel
+        for x in xrange(iter):
+            prg.run_layer(queueList[x], (global_x_list[x], global_y), (local_x, local_y), np.int32(inMat[x].shape[0]), np.int32(Wtr.shape[0]), cl_inMatList[x], cl_W, cl_b, cl_outList[x])
+            queueList[x].flush()
+        
+        # Copy results back to host (blocking call)
+        outList = []
+        for x in xrange(iter):
+            outList.append(np.zeros((inMat[x].shape[0],self.W.shape[1]), dtype=dtype))
+            cl.enqueue_copy(queueList[x], outList[x], cl_outList[x])
+        return outList
             
 
 class SoftMax(Layer):
@@ -187,7 +187,9 @@ class SoftMax(Layer):
         return self.W.shape[1]
 
     def run(self, inMat, ctx=None, queueList=None):
-        if not queueList:
+        if queueList is not None:
+            return self._run_opencl(inMat, ctx, queueList)
+        else:
             assert self.in_size == inMat.shape[1]
             tmp =  inMat.dot(self.W) + self.b
             m = np.amax(tmp, axis=1).reshape((-1,1))
@@ -195,63 +197,60 @@ class SoftMax(Layer):
             x = np.sum(tmp, axis=1)
             tmp /= x.reshape((-1,1))
             return tmp
-        else:
-            for mat in inMat:
-                assert self.in_size == mat.shape[1]
-            iter = len(inMat)
-            
-            fp_type = dtype
-            kernel_src = kernel_code_softmax
-            
-            # Calculate work items 
-            local_x = 256
-            local_y = 1
-            global_x_list = []
-            for mat in inMat:
-                global_x = mat.shape[0]
-                if global_x % local_x:
-                    global_x = (global_x / local_x + 1) * local_x 
-                global_x_list.append(global_x) 
-            global_y = 1
-            local_x_softmax = 256
-            
-            # Build the kernel (builds for the first time, then uses cached version)
-            opencl_fptype = "double"
-            opencl_fptype_suffix = ""
-            if fp_type == np.float32:
-                opencl_fptype = "float"
-                opencl_fptype_suffix = "f"
-            opencl_fptype_define = "-DFPTYPE="+opencl_fptype+" -DF="+opencl_fptype_suffix
-            prg = cl.Program(ctx, kernel_src).build("-I. -Werror " + opencl_fptype_define + 
-                " -DWORK_ITEMS="+str(local_x)+" -DIN_MAT_Y="+str(inMat[0].shape[1]) + 
-                " -DWORK_ITEMS_PAR="+str(local_x_softmax) + " -DITER="+str((self.W.shape[1]-1)/local_x_softmax))
-            
-            Wtr = np.transpose(self.W)
-            
-            # Allocate OpenCL buffers    
-            cl_inMatList = []
-            for x in xrange(iter):
-                cl_inMatList.append(cl.Buffer(ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR, hostbuf=np.ravel(inMat[x])))
-            cl_W = cl.Buffer(ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR, hostbuf=np.ravel(Wtr))
-            cl_b = cl.Buffer(ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR, hostbuf=np.ravel(self.b))
-            cl_outList = []
-            for x in xrange(iter):
-                cl_outList.append(cl.Buffer(ctx, cl.mem_flags.WRITE_ONLY, inMat[x].shape[0]*self.W.shape[1]*inMat[x].itemsize))
 
-            # Run the kernel
-            for x in xrange(iter):
-                prg.run_layer(queueList[x], (global_x_list[x], global_y), (local_x, local_y), np.int32(inMat[x].shape[0]), np.int32(Wtr.shape[0]), cl_inMatList[x], cl_W, cl_b, cl_outList[x])
-                queueList[x].flush()
-            for x in xrange(iter):
-                prg.run_softmax(queueList[x], (inMat[x].shape[0]*local_x_softmax, 1), (local_x_softmax, 1), np.int32(Wtr.shape[0]), cl_outList[x])
-                queueList[x].flush()
-            
-            # Copy results back to host (blocking call)
-            outList = []
-            for x in xrange(iter):
-                outList.append(np.zeros((inMat[x].shape[0],self.W.shape[1]), dtype=dtype))
-                cl.enqueue_copy(queueList[x], outList[x], cl_outList[x])
-            return outList
+    def _run_opencl(self, inMat, ctx, queueList):
+        for mat in inMat:
+            assert self.in_size == mat.shape[1]
+        iter = len(inMat)
+        
+        fp_type = dtype
+        kernel_src = kernel_code_softmax
+        
+        # Calculate work items 
+        local_x = 256
+        local_y = 1
+        global_x_list = []
+        for mat in inMat:
+            global_x = mat.shape[0]
+            if global_x % local_x:
+                global_x = (global_x / local_x + 1) * local_x 
+            global_x_list.append(global_x) 
+        global_y = 1
+        local_x_softmax = 256
+        
+        # Build the kernel (builds for the first time, then uses cached version)
+        prg = build_program(ctx, kernel_src, extra=
+            '-DWORK_ITEMS={} -DIN_MAT_Y={} -DWORK_ITEMS_PAR={} -DITER={}'.format(
+            local_x, inMat[0].shape[1], local_x_softmax, (self.W.shape[1]-1) / local_x_softmax
+        ))
+
+        Wtr = np.transpose(self.W)
+        
+        # Allocate OpenCL buffers    
+        cl_inMatList = []
+        buffer_flags = cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR
+        for x in xrange(iter):
+            cl_inMatList.append(cl.Buffer(ctx, buffer_flags, hostbuf=np.ravel(inMat[x])))
+        cl_W = cl.Buffer(ctx, buffer_flags, hostbuf=np.ravel(Wtr))
+        cl_b = cl.Buffer(ctx, buffer_flags, hostbuf=np.ravel(self.b))
+        cl_outList = []
+        for x in xrange(iter):
+            cl_outList.append(cl.Buffer(ctx, cl.mem_flags.WRITE_ONLY, inMat[x].shape[0]*self.W.shape[1]*inMat[x].itemsize))
+
+        # Run the kernel
+        for x in xrange(iter):
+            prg.run_layer(queueList[x], (global_x_list[x], global_y), (local_x, local_y), np.int32(inMat[x].shape[0]), np.int32(Wtr.shape[0]), cl_inMatList[x], cl_W, cl_b, cl_outList[x])
+            queueList[x].flush()
+        for x in xrange(iter):
+            prg.run_softmax(queueList[x], (inMat[x].shape[0]*local_x_softmax, 1), (local_x_softmax, 1), np.int32(Wtr.shape[0]), cl_outList[x])
+            queueList[x].flush()
+        
+        # Copy results back to host (blocking call)
+        outList = []
+        for x in xrange(iter):
+            outList.append(np.zeros((inMat[x].shape[0],self.W.shape[1]), dtype=dtype))
+            cl.enqueue_copy(queueList[x], outList[x], cl_outList[x])
+        return outList
 
 
 class SimpleRNN(RNN):
@@ -369,7 +368,9 @@ class LSTM(RNN):
         return out, state
         
     def run(self, inMat, ctx=None, queueList=None):
-        if not queueList:
+        if queueList is not None:
+            return self._run_opencl(inMat, ctx, queueList)
+        else:
             assert self.in_size == inMat.shape[1]
 
             out = np.zeros((inMat.shape[0], self.out_size), dtype=dtype)
@@ -380,57 +381,53 @@ class LSTM(RNN):
                 out_prev, state = self.step(v, (out_prev, state))
                 out[i] = out_prev
             return out
-        else:
-            for mat in inMat:
-                assert self.in_size == mat.shape[1]
-            iter = len(inMat)
-            
-            outList = []
-            for x in xrange(iter):
-                outList.append(np.zeros((inMat[x].shape[0], self.out_size), dtype=dtype))
-                
-            fp_type = dtype
-            kernel_src = kernel_code_lstm
-            
-            # Build the kernel (builds for the first time, then uses cached version)
-            opencl_fptype = "double"
-            opencl_fptype_suffix = ""
-            if fp_type == np.float32:
-                opencl_fptype = "float"
-                opencl_fptype_suffix = "f"
-            opencl_fptype_define = "-DFPTYPE="+opencl_fptype+" -DF="+opencl_fptype_suffix
-            prg = cl.Program(ctx, kernel_src).build("-I. -Werror " + opencl_fptype_define + 
-                  " -DWORK_ITEMS="+str(self.iW.shape[1]) + " -DL_WX="+str(self.lW.shape[0]) + " -DL_WY="+str(self.lW.shape[1]))
-            
-            # Allocate OpenCL buffers
-            cl_inMatList = []
-            for x in xrange(iter):
-                cl_inMatList.append(cl.Buffer(ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR, hostbuf=np.ravel(inMat[x])))
-            cl_iW = cl.Buffer(ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR, hostbuf=np.ravel(self.iW))
-            cl_lW = cl.Buffer(ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR, hostbuf=np.ravel(self.lW))
-            cl_b = cl.Buffer(ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR, hostbuf=self.b)
-            cl_p = cl.Buffer(ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR, hostbuf=np.ravel(self.p))
-            cl_outList = []
-            for x in xrange(iter):
-                cl_outList.append(cl.Buffer(ctx, cl.mem_flags.WRITE_ONLY, outList[x].shape[0]*self.out_size*inMat[x].itemsize))
-            cl_outvW = []
-            for x in xrange(iter):
-                cl_outvW.append(cl.Buffer(ctx, cl.mem_flags.READ_WRITE, outList[x].shape[0]*self.iW.shape[1]*inMat[x].itemsize))
 
-            # Run the kernel
-            for x in xrange(iter):
-                prg.run_dot(queueList[x], (inMat[x].shape[0]*self.iW.shape[1], 1), (self.iW.shape[1], 1), np.int32(self.iW.shape[0]), np.int32(self.iW.shape[1]), cl_inMatList[x], cl_iW, cl_outvW[x])
-                queueList[x].flush()
-            for x in xrange(iter):
-                prg.run_lstm_layer(queueList[x], (self.iW.shape[1], 1), (self.iW.shape[1], 1), np.int32(inMat[x].shape[0]), cl_outvW[x], cl_lW, cl_b, cl_p, cl_outList[x])
-                queueList[x].flush()
+    def _run_opencl(self, inMat, ctx, queueList):
+        for mat in inMat:
+            assert self.in_size == mat.shape[1]
+        iter = len(inMat)
+        
+        outList = []
+        for x in xrange(iter):
+            outList.append(np.zeros((inMat[x].shape[0], self.out_size), dtype=dtype))
             
-            # Copy results back to host (blocking call)
-            for x in xrange(iter):
-                outRavel = np.ravel(outList[x])
-                cl.enqueue_copy(queueList[x], outRavel, cl_outList[x])
-                outList[x] = np.copy(np.reshape(outRavel, (outList[x].shape[0], outList[x].shape[1])))
-            return outList
+        kernel_src = kernel_code_lstm
+        
+        # Build the kernel (builds for the first time, then uses cached version)
+        prg = build_program(ctx, kernel_src, extra=
+            '-DWORK_ITEMS={} -DL_WX={} -DL_WY={}'.format(
+            self.iW.shape[1], self.lW.shape[0], self.lW.shape[1]
+        ))
+        
+        # Allocate OpenCL buffers
+        cl_inMatList = []
+        buffer_flags = cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR
+        for x in xrange(iter):
+            cl_inMatList.append(cl.Buffer(ctx, buffer_flags, hostbuf=np.ravel(inMat[x])))
+        cl_iW = cl.Buffer(ctx, buffer_flags, hostbuf=np.ravel(self.iW))
+        cl_lW = cl.Buffer(ctx, buffer_flags, hostbuf=np.ravel(self.lW))
+        cl_b  = cl.Buffer(ctx, buffer_flags, hostbuf=self.b)
+        cl_p  = cl.Buffer(ctx, buffer_flags, hostbuf=np.ravel(self.p))
+        cl_outList = []
+        cl_outvW = []
+        for x in xrange(iter):
+            cl_outList.append(cl.Buffer(ctx, cl.mem_flags.WRITE_ONLY, outList[x].shape[0]*self.out_size*inMat[x].itemsize))
+            cl_outvW.append(cl.Buffer(ctx, cl.mem_flags.READ_WRITE, outList[x].shape[0]*self.iW.shape[1]*inMat[x].itemsize))
+
+        # Run the kernel
+        for x in xrange(iter):
+            prg.run_dot(queueList[x], (inMat[x].shape[0]*self.iW.shape[1], 1), (self.iW.shape[1], 1), np.int32(self.iW.shape[0]), np.int32(self.iW.shape[1]), cl_inMatList[x], cl_iW, cl_outvW[x])
+            queueList[x].flush()
+        for x in xrange(iter):
+            prg.run_lstm_layer(queueList[x], (self.iW.shape[1], 1), (self.iW.shape[1], 1), np.int32(inMat[x].shape[0]), cl_outvW[x], cl_lW, cl_b, cl_p, cl_outList[x])
+            queueList[x].flush()
+        
+        # Copy results back to host (blocking call)
+        for x in xrange(iter):
+            outRavel = np.ravel(outList[x])
+            cl.enqueue_copy(queueList[x], outRavel, cl_outList[x])
+            outList[x] = np.copy(np.reshape(outRavel, (outList[x].shape[0], outList[x].shape[1])))
+        return outList
 
 
 class Reverse(Layer):
@@ -536,6 +533,30 @@ class BiRNN(Parallel):
         super(BiRNN, self).__init__((layer1, Reverse(layer2)))
 
 
+def build_program(ctx, src, extra=None, debug=False):
+    fptype = 'double'
+    fptype_suffix = ''
+    if dtype == np.float32:
+        fptype = 'float'
+        fptype_suffix = 'f'
+
+    # clang doesn't like macros being used as float suffix
+    src = src.replace('FSUF', fptype_suffix)
+
+    if debug:
+        for i, line in enumerate(src.splitlines()):
+            print '{:03d}{}'.format(i, line)
+ 
+    build_line = '-I. -DFPTYPE={} -DFSUF={}'.format(fptype, fptype_suffix)
+    if extra is not None:
+        build_line = '{} {}'.format(build_line, extra)
+    if debug:
+        build_line += ' -Werror'
+
+    return cl.Program(ctx, src).build(build_line)
+
+
+
 kernel_code_feedforward = """
 #if __OPENCL_VERSION__ <= CL_VERSION_1_1
 #pragma OPENCL EXTENSION cl_khr_fp64: enable
@@ -559,7 +580,7 @@ __kernel void run_layer(
         
         for(int y = 0; y < Wx; ++y)
         {
-            FPTYPE r = 0.0F;
+            FPTYPE r = 0.0FSUF;
             for(int z = 0; z < IN_MAT_Y; ++z)
                 r += inMatBuffer[z] * W[y*IN_MAT_Y+z];
             ret[id*Wx+y] = tanh(r + b[y]);
@@ -585,7 +606,7 @@ void run_dot(
     int local_size = get_local_size(0);
     int group_id = get_group_id(0);
     
-    FPTYPE vW = 0.0F;
+    FPTYPE vW = 0.0FSUF;
     for(int x = 0; x < iWy; x += local_size)
     {
         for(int y = 0; y < iWx; ++y)
@@ -594,7 +615,7 @@ void run_dot(
     }
 }
 
-#define sigmoid(X) (1.0F/(1.0F + exp(-(X))))
+#define sigmoid(X) (1.0FSUF/(1.0FSUF + exp(-(X))))
 
 __kernel __attribute__((reqd_work_group_size(WORK_ITEMS, 1, 1))) 
 void run_lstm_layer(
@@ -606,20 +627,20 @@ void run_lstm_layer(
     __global FPTYPE* restrict out
 ) {
     int local_id = get_global_id(0);
-    int local_size = get_local_size(0);
+    //int local_size = get_local_size(0);
     
-    FPTYPE state = 0.0F;
-    FPTYPE prev_state = 0.0F;
+    FPTYPE state = 0.0FSUF;
+    FPTYPE prev_state = 0.0FSUF;
     __local FPTYPE out_prev[WORK_ITEMS/4];
     __local FPTYPE sumW[WORK_ITEMS];
     
     if(local_id < 64)
-        out_prev[local_id] = 0.0F;
+        out_prev[local_id] = 0.0FSUF;
     barrier(CLK_LOCAL_MEM_FENCE);
     
     for(int i = 0; i < inMatx; ++i)
     {
-        sumW[local_id] = 0.0F;
+        sumW[local_id] = 0.0FSUF;
         for(int y = 0; y < L_WX; ++y)
             sumW[local_id] += out_prev[y] * lW[y*L_WY + local_id];
 
@@ -665,7 +686,7 @@ void run_layer(
         
         for(int y = 0; y < Wx; ++y)
         {
-            FPTYPE r = 0.0F;
+            FPTYPE r = 0.0FSUF;
             for(int z = 0; z < IN_MAT_Y; ++z)
                 r += inMatBuffer[z] * W[y*IN_MAT_Y+z];
             ret[id*Wx+y] = r + b[y];
@@ -710,8 +731,8 @@ void run_softmax(
     __local FPTYPE buffer[WORK_ITEMS_PAR];
     __local FPTYPE last_in;
     FPTYPE elem[ITER];
-    FPTYPE max = 0.0F;
-    FPTYPE sum = 0.0F;
+    FPTYPE max = 0.0FSUF;
+    FPTYPE sum = 0.0FSUF;
     
     if(local_id == 0)
         last_in = inout[(group_id+1) * size - 1]; // access last size-1 element
