@@ -1,7 +1,7 @@
 import sys
 import os
 import time
-from itertools import tee, imap, izip, izip_longest, product
+from itertools import tee, imap, izip, izip_longest, product, cycle, islice, chain
 from functools import partial
 from multiprocessing import Pool
 import random
@@ -36,8 +36,6 @@ def get_shared_lib(name):
     return library
 
 
-
-
 def all_nmers(n=3, alpha='ACGT'):
     return [''.join(x) for x in product(alpha, repeat=n)]
 
@@ -67,6 +65,19 @@ def window(iterable, size):
         for each in iters[i:]:
             next(each, None)
     return izip(*iters)
+
+
+def group_by_list(iterable, group_sizes):
+    """Yield successive varying size lists from iterator"""
+    sizes = cycle(group_sizes)
+    it = iter(iterable)
+    while True:
+        chunk_it = islice(it, sizes.next())
+        try:
+            first_el = next(chunk_it)
+        except StopIteration:
+            break
+        yield list(chain((first_el,), chunk_it))
 
 
 class AddFields(object):

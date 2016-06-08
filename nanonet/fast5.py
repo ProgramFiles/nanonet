@@ -956,23 +956,10 @@ def iterate_fast5(path, strand_list=None, paths=False, mode='r', limit=None, fil
     else:
         files = [os.path.join(path, x) for x in strand_list]
     
-    if sort_by_size is not None: 
-        # Re-populate list with filename, size tuples
-        for i in xrange(len(files)):
-            files[i] = (files[i], os.path.getsize(files[i]))
-            
-        # Sort list by file size
-        # If reverse=True sort from largest to smallest
-        # If reverse=False sort from smallest to largest
+    if sort_by_size is not None:
         reverse = True if sort_by_size == 'desc' else False 
-        files.sort(key=lambda filename: filename[1], reverse=reverse)
-        
-        # Re-populate list with just filenames
-        for i in xrange(len(files)):
-            files[i] = files[i][0]
+        files.sort(reverse=reverse, key=lambda x: os.path.getsize(x))
     
-    list = []
-    cnt = 0    
     for f in files[:limit] :
         if not os.path.exists(f):
             sys.stderr.write('File {} does not exist, skipping\n'.format(f))
@@ -982,19 +969,4 @@ def iterate_fast5(path, strand_list=None, paths=False, mode='r', limit=None, fil
             yield fh
             fh.close()
         else:
-            if not files_group_pattern:
-                yield os.path.abspath(f)
-            else:
-                files_nb = files_group_pattern[cnt]
-                if len(list) == files_nb-1:
-                    list.append(os.path.abspath(f))
-                    yield list
-                    list = []
-                    cnt +=1
-                    if cnt >= len(files_group_pattern):
-                        cnt = 0
-                else:
-                    list.append(os.path.abspath(f))
-    if len(list) > 0:
-        yield list
-            
+            yield os.path.abspath(f)

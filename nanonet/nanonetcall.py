@@ -16,7 +16,7 @@ import pyopencl as cl
 
 from nanonet import decoding, nn
 from nanonet.fast5 import Fast5, iterate_fast5
-from nanonet.util import random_string, conf_line, FastaWrite, tang_imap, all_nmers, kmers_to_sequence, kmer_overlap, AddFields
+from nanonet.util import random_string, conf_line, FastaWrite, tang_imap, all_nmers, kmers_to_sequence, kmer_overlap, group_by_list, AddFields
 from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
 from nanonet.features import make_basecall_input_multi
 
@@ -79,7 +79,7 @@ def get_parser():
 
     return parser
 
-class process_attr:
+class ProcessAttr(object):
     def __init__(self, fast5_files, use_opencl=False, vendor=None, device_id=0):
         self.fast5_files = fast5_files
         self.use_opencl = use_opencl
@@ -88,13 +88,13 @@ class process_attr:
 
 def list_opencl_platforms():
     print('\n' + '=' * 60 + '\nOpenCL Platforms and Devices')
-    platforms = [p for p in cl.get_platforms() if p.get_devices(device_type=cl.device_type.GPU)]
+    platforms = [p for p in cl.get_platforms() if p.get_devices(device_type=cl.device_type.ALL)]
     for platform in platforms:
         print('=' * 60)
         print('Platform - Name:  ' + platform.name)
         print('Platform - Vendor:  ' + platform.vendor)
         print('Platform - Version:  ' + platform.version)
-        for device in platform.get_devices(device_type=cl.device_type.GPU):  # Print each device per-platform
+        for device in platform.get_devices(device_type=cl.device_type.ALL):  # Print each device per-platform
             print('    ' + '-' * 56)
             print('    Device - Name:  ' + device.name)
             print('    Device - Type:  ' + cl.device_type.to_string(device.type))
@@ -304,28 +304,34 @@ def main():
         'write_events'
     )}
 
-    files_pattern = [1] * args.jobs
-    sort_by_size = None
-    if args.opencl:
-        for x in xrange(len(args.platforms)):
-            files_pattern[x] = args.opencl_input_files
-        sort_by_size = 'desc'
             
     #TODO: handle case where there are pre-existing files.
     if args.watch is not None:
         # An optional component
         from nanonet.watcher import Fast5Watcher
         fast5_files = Fast5Watcher(args.input, timeout=args.watch)
-    else:                                                                                                                                 
-        fast5_files = iterate_fast5(args.input, paths=True, strand_list=args.strand_list, limit=args.limit, files_group_pattern=files_pattern, sort_by_size=sort_by_size)
+    else:
+        sort_by_size = 'desc' if args.opencl else None
+        fast5_files = iterate_fast5(args.input, paths=True, strand_list=args.strand_list, limit=args.limit, sort_by_size=sort_by_size)
 
-    pa_list = []
-    for i,ff in enumerate(fast5_files):
-        if args.opencl and i % args.jobs in xrange(len(args.platforms)):
-            vendor,device_id = args.platforms[i%args.jobs].split(':')
-            pa_list.append(process_attr(ff, use_opencl=True, vendor=vendor, device_id=int(device_id)))
-        else:
-            pa_list.append(process_attr(ff))
+    # files_pattern controls grouping of files. First N entries
+    #    are for the N opencl devices. files are sent singly to
+    #    CPUs whilst in groups of args.opencl_input_files to 
+    #    other devices.
+    files_pattern = [1] * args.jobs
+    if args.opencl:
+        files_pattern[:len(args.platforms)] = args.opencl_input_files
+    print files_pattern
+    fast5_groups = group_by_list(fast5_files, files_pattern) 
+
+    def create_processes():
+        for i, ff in enumerate(fast5_groups):
+            if args.opencl and i % args.jobs in xrange(len(args.platforms)):
+                vendor,device_id = args.platforms[i%args.jobs].split(':')
+                yield ProcessAttr(ff, use_opencl=True, vendor=vendor, device_id=int(device_id))
+            else:
+                yield ProcessAttr(ff)
+    pa_gen = create_processes()
 
     t0 = timeit.default_timer()
     n_reads = 0
@@ -333,7 +339,7 @@ def main():
     n_events = 0
     timings = [0.0, 0.0, 0.0, 0.0, 0.0]
     with FastaWrite(args.output) as fasta:
-        for ret in tang_imap(process_read, pa_list, fix_args=fix_args, fix_kwargs=fix_kwargs, threads=args.jobs):
+        for ret in tang_imap(process_read, pa_gen, fix_args=fix_args, fix_kwargs=fix_kwargs, threads=args.jobs):
             if ret is None:
                 continue
             for result in ret:
