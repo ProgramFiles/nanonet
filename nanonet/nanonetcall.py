@@ -13,12 +13,14 @@ import pkg_resources
 import itertools
 import numpy as np
 import pyopencl as cl
+from functools import partial
 
 from nanonet import decoding, nn
 from nanonet.fast5 import Fast5, iterate_fast5
 from nanonet.util import random_string, conf_line, FastaWrite, tang_imap, all_nmers, kmers_to_sequence, kmer_overlap, group_by_list, AddFields
 from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
 from nanonet.features import make_basecall_input_multi
+from nanonet.jobqueue import JobQueue
 
 import warnings
 warnings.simplefilter("ignore")
@@ -320,8 +322,7 @@ def main():
     #    other devices.
     files_pattern = [1] * args.jobs
     if args.opencl:
-        files_pattern[:len(args.platforms)] = args.opencl_input_files
-    print files_pattern
+        files_pattern[:len(args.platforms)] = [args.opencl_input_files] * len(args.platforms)
     fast5_groups = group_by_list(fast5_files, files_pattern) 
 
     def create_processes():
@@ -338,8 +339,12 @@ def main():
     n_bases = 0
     n_events = 0
     timings = [0.0, 0.0, 0.0, 0.0, 0.0]
+    
+    function = partial(process_read, *fix_args, **fix_kwargs)
+    workers = [(function, None)] * args.jobs
+
     with FastaWrite(args.output) as fasta:
-        for ret in tang_imap(process_read, pa_gen, fix_args=fix_args, fix_kwargs=fix_kwargs, threads=args.jobs):
+        for ret in JobQueue(pa_gen, workers):
             if ret is None:
                 continue
             for result in ret:

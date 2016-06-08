@@ -10,6 +10,7 @@ import math
 import importlib
 import imp
 from ctypes import cdll
+from contextlib import contextmanager
 
 import numpy as np
 from numpy.lib import recfunctions as nprf
@@ -365,3 +366,38 @@ def kmers_to_sequence(kmers):
        and :func:`kmers_to_call`
     """
     return kmers_to_call(kmers, kmer_overlap(kmers))
+
+
+def fileno(file_or_fd):
+    """Return a file descriptor from a file descriptor or file object."""
+    fd = getattr(file_or_fd, 'fileno', lambda: file_or_fd)()
+    if not isinstance(fd, int):
+        raise ValueError("Expected a file (`.fileno()`) or a file descriptor")
+    return fd
+
+
+@contextmanager
+def stderr_redirected(to=os.devnull, stderr=sys.stderr):
+    """Redirect stderr (optionally something else) at the file
+    descriptor level. Defaults allow ignoring of stderr.
+
+    :param to: redirection target
+    :param stderr: stream to redirect
+    """
+    stderr_fd = fileno(stderr)
+    # copy stderr_fd before it is overwritten
+    #NOTE: `copied` is inheritable on Windows when duplicating a standard stream
+    with os.fdopen(os.dup(stderr_fd), 'wb') as copied:
+        stderr.flush()  # flush library buffers that dup2 knows nothing about
+        try:
+            os.dup2(fileno(to), stderr_fd)  # $ exec 2>&to
+        except ValueError:  # filename
+            with open(to, 'wb') as to_file:
+                os.dup2(to_file.fileno(), stderr_fd)  # $ exec 2> to
+        try:
+            yield stderr # allow code to be run with the redirected stderr
+        finally:
+            # restore stderr to its previous value
+            #NOTE: dup2 makes stderr_fd inheritable unconditionally
+            stderr.flush()
+            os.dup2(copied.fileno(), stderr_fd)  # $ exec 2>&copied
