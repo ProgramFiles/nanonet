@@ -25,6 +25,7 @@ from nanonet.jobqueue import JobQueue
 import warnings
 warnings.simplefilter("ignore")
 
+now = timeit.default_timer
 
 __fast5_analysis_name__ = 'Basecall_RNN_1D'
 __fast5_section_name__ = 'BaseCalled_{}'
@@ -115,13 +116,10 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, w
     """
     #sys.stderr.write("CPU process\n processing {}\n".format(fast5))
 
-    t0 = timeit.default_timer()
     network = np.load(modelfile).item()
-    t1 = timeit.default_timer()
-    load_time = t1 - t0
-
     kwargs['window'] = network.meta['window']
 
+    # Get features
     try:
         it = make_basecall_input_multi((fast5,), **kwargs)
         if write_events:
@@ -130,14 +128,39 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, w
             name, features, _ = it.next()
     except Exception as e:
         return None
-    t2 = timeit.default_timer()
-    feature_time = t2 - t1
 
+    # Run network
+    t0 = now()
     post = network.run(features.astype(nn.dtype))
-    t3 = timeit.default_timer()
-    network_time = t3 - t2
+    network_time = now() - t0
 
+    # Manipulate posterior matrix
+    t0 = now()
+    post, good_events = clean_post(post, network.meta['kmers'], min_prob)
+    if post_only:
+        return post
+
+    # Decode kmers
+    if fast_decode:
+        score, states = decoding.decode_homogenous(post, log=False)
+    else:
+        trans = decoding.estimate_transitions(post, trans=trans)
+        score, states = decoding.decode_profile(post, trans=np.log(__ETA__ + trans), log=False)
+    decode_time = now() - t0
+
+    # Form basecall
     kmers = network.meta['kmers']
+    kmer_path = [kmers[i] for i in states]
+    seq = kmers_to_sequence(kmer_path)
+
+    # Write events table
+    if write_events:
+        write_to_file(fast5, events, good_events, kmer_path, kmers, post, states)
+
+    return (name, seq, score, len(features)), (network_time, decode_time)
+
+
+def clean_post(post, kmers, min_prob):
     # Do we have an XXX kmer? Strip out events where XXX most likely,
     #    and XXX states entirely
     if kmers[-1] == 'X'*len(kmers[-1]):
@@ -147,67 +170,51 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, w
         post = post[good_events]
         post = post[:, :-1]
         if len(post) == 0:
-            return None
-
+            return None, None
+    
     weights = np.sum(post, axis=1).reshape((-1,1))
-    post /= weights
-    if post_only:
-        return post
-
+    post /= weights 
     post = min_prob + (1.0 - min_prob) * post
-    if fast_decode:
-        score, states = decoding.decode_homogenous(post, log=False)
-    else:
-        trans = decoding.estimate_transitions(post, trans=trans)
-        score, states = decoding.decode_profile(post, trans=np.log(__ETA__ + trans), log=False)
+    return post, good_events
 
-    # Form basecall
-    kmer_path = [kmers[i] for i in states]
-    seq = kmers_to_sequence(kmer_path)
-    t4 = timeit.default_timer()
-    decode_time = t4 -t3
 
-    # Write events table
-    if write_events:
-        adder = AddFields(events[good_events])
-        adder.add('model_state', kmer_path,
-            dtype='>S{}'.format(len(kmers[0])))
-        adder.add('p_model_state', np.fromiter(
-            (post[i,j] for i,j in itertools.izip(xrange(len(post)), states)),
-            dtype=float, count=len(post)))
-        adder.add('mp_model_state', np.fromiter(
-            (kmers[i] for i in np.argmax(post, axis=1)),
-            dtype='>S{}'.format(len(kmers[0])), count=len(post)))
-        adder.add('p_mp_model_state', np.max(post, axis=1))
-        adder.add('move', np.array(kmer_overlap(kmer_path)), dtype=int)
+def write_to_file(fast5, events, good_events, kmer_path, kmers, post, states):
+    adder = AddFields(events[good_events])
+    adder.add('model_state', kmer_path,
+        dtype='>S{}'.format(len(kmers[0])))
+    adder.add('p_model_state', np.fromiter(
+        (post[i,j] for i,j in itertools.izip(xrange(len(post)), states)),
+        dtype=float, count=len(post)))
+    adder.add('mp_model_state', np.fromiter(
+        (kmers[i] for i in np.argmax(post, axis=1)),
+        dtype='>S{}'.format(len(kmers[0])), count=len(post)))
+    adder.add('p_mp_model_state', np.max(post, axis=1))
+    adder.add('move', np.array(kmer_overlap(kmer_path)), dtype=int)
 
-        mid = len(kmers[0]) / 2
-        bases = set(''.join(kmers)) - set('X')
-        for base in bases:
-            cols = np.fromiter((k[mid] == base for k in kmers),
-                dtype=bool, count=len(kmers))
-            adder.add('p_{}'.format(base), np.sum(post[:, cols], axis=1), dtype=float)
+    mid = len(kmers[0]) / 2
+    bases = set(''.join(kmers)) - set('X')
+    for base in bases:
+        cols = np.fromiter((k[mid] == base for k in kmers),
+            dtype=bool, count=len(kmers))
+        adder.add('p_{}'.format(base), np.sum(post[:, cols], axis=1), dtype=float)
 
-        events = adder.finalize()
+    events = adder.finalize()
 
-        with Fast5(fast5, 'a') as fh:
-           base = fh._join_path(
-               fh.get_analysis_new(__fast5_analysis_name__),
-               __fast5_section_name__.format(kwargs['section']))
-           fh._add_event_table(events, fh._join_path(base, 'Events'))
-           try:
-               name = fh.get_read(group=True).attrs['read_id']
-           except:
-               pass # filename inherited from above
-           fh._add_string_dataset(
-               '@{}\n{}\n+\n{}\n'.format(name, seq, '!'*len(seq)),
-               fh._join_path(base, 'Fastq'))
-    write_time = timeit.default_timer() - t4
-
-    return (name, seq, score, len(features), (feature_time, load_time, network_time, decode_time, write_time))
+    with Fast5(fast5, 'a') as fh:
+       base = fh._join_path(
+           fh.get_analysis_new(__fast5_analysis_name__),
+           __fast5_section_name__.format(kwargs['section']))
+       fh._add_event_table(events, fh._join_path(base, 'Events'))
+       try:
+           name = fh.get_read(group=True).attrs['read_id']
+       except:
+           pass # filename inherited from above
+       fh._add_string_dataset(
+           '@{}\n{}\n+\n{}\n'.format(name, seq, '!'*len(seq)),
+           fh._join_path(base, 'Fastq'))
 
         
-def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, post_only=False, write_events=True, fast_decode=False, **kwargs):
+def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, write_events=True, fast_decode=False, **kwargs):
     """Run neural network over a set of fast5 files
 
     :param modelfile: neural network specification.
@@ -217,24 +224,16 @@ def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, po
     """
     #sys.stderr.write("OpenCL process\n processing {}\n{}\n".format(fast5_list, pa.__dict__))
 
-    t0 = timeit.default_timer()
     network = np.load(modelfile).item()
-    t1 = timeit.default_timer()
-    load_time = t1 - t0
-
     kwargs['window'] = network.meta['window']
-    use_opencl = pa.use_opencl
-    
-    post_list = []
+
+    n_files = len(fast5_list)    
+
+    # Get features
     features_list = []
     events_list = []
-    name_list = []
-    
-    feature_time_list = []
-    network_time_list = []
-
+    name_list = []    
     for fast5 in fast5_list:
-        t1 = timeit.default_timer()
         try:
             it = make_basecall_input_multi((fast5,), **kwargs)
             if write_events:
@@ -245,142 +244,77 @@ def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, po
             features_list.append(features.astype(nn.dtype))
             name_list.append(name)
         except Exception as e:
+            # TODO: handle single failures more elegantly
             print str(e)
-            return None
-        t2 = timeit.default_timer()
-        feature_time_list.append(t2 - t1)
-    
-        if not use_opencl:
-            post = network.run(features.astype(nn.dtype))
-            post_list.append(post)
-            t3 = timeit.default_timer()
-            network_time_list.append(t3 - t2)
-            
-    ctx = None
-    queue_list = []
-    max_workgroup_size = 256        
-    t2 = timeit.default_timer()
-    if use_opencl:
-        platforms = [p for p in cl.get_platforms() if p.get_devices(device_type=cl.device_type.GPU) and pa.vendor.lower() in p.get_info(cl.platform_info.NAME).lower()]
-        platform = platforms[0]
-        devices = platform.get_devices(device_type=cl.device_type.GPU)
-        device = devices[pa.device_id]
-        max_workgroup_size = device.get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
-        ctx = cl.Context([device]) 
-        for x in xrange(len(features_list)):
-            queue_list.append(cl.CommandQueue(ctx))
-        post_list = network.run(features_list, ctx, queue_list)
-        t3 = timeit.default_timer()
-        for x in xrange(len(features_list)):
-            network_time_list.append((t3 - t2)/len(features_list))
+            return [None] * n_files
 
-    
-    trans_copy = trans
-    trans_list = []
-    good_events_list = []
-    t3 = timeit.default_timer()
-    score_list = [None] * len(fast5_list)
-    states_list = [None] * len(fast5_list)
-    for x in xrange(len(fast5_list)):
-        post = post_list[x]
-        trans = trans_copy
-        
-        kmers = network.meta['kmers']
-        # Do we have an XXX kmer? Strip out events where XXX most likely,
-        #    and XXX states entirely
-        if kmers[-1] == 'X'*len(kmers[-1]):
-            bad_kmer = post.shape[1] - 1
-            max_call = np.argmax(post, axis=1)
-            good_events = (max_call != bad_kmer)
-            good_events_list.append(good_events)
-            post = post[good_events]
-            post = post[:, :-1]
-    
-        weights = np.sum(post, axis=1).reshape((-1,1))
-        post /= weights
-        if post_only:
-            return post
-    
-        post = min_prob + (1.0 - min_prob) * post
-        post_list[x] = post
+    # Set up OpenCL            
+    platform = [
+        p for p in cl.get_platforms()
+        if p.get_devices(device_type=cl.device_type.GPU)
+        and pa.vendor.lower() in p.get_info(cl.platform_info.NAME).lower()
+    ][0]
+    device = platform.get_devices(
+        device_type=cl.device_type.GPU
+    )[pa.device_id]
+    max_workgroup_size = device.get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
+    ctx = cl.Context([device]) 
+    queue_list = [cl.CommandQueue(ctx)] * n_files
+
+    # Run network
+    t0 = now()
+    post_list = network.run(features_list, ctx, queue_list)
+    network_time_list = [(now() - t0) / n_files] * n_files 
+
+    # Manipulate posterior
+    post_list, good_events_list = zip(*(
+        clean_post(post, network.meta['kmers'], min_prob) for post in post_list
+    ))
+
+    # Decode kmers
+    trans_list = [None] * n_files
+    score_list = [None] * n_files
+    states_list = [None] * n_files
+    decode_time_list = []
+    for x, post in enumerate(post_list):
         if fast_decode:
-            score_list[x], states_list[x] = decoding.decode_homogenous(post_list[x], log=False)
+            t0 = now()
+            score_list[x], states_list[x] = decoding.decode_homogenous(post, log=False)
+            decode_time_list.append(now() - t0)
         else:
-            trans = decoding.estimate_transitions(post_list[x], trans=trans)
-            if use_opencl:
-                trans_list.append(np.log(__ETA__ + trans))    
-            else:
-                score_list[x], states_list[x] = decoding.decode_profile(post_list[x], trans=np.log(__ETA__ + trans), log=False)
+            trans_list[x] = np.log(__ETA__ + decoding.estimate_transitions(post, trans=trans))
     
-    if not fast_decode and use_opencl:
-        score_list, states_list = decoding.decode_profile_opencl(ctx, queue_list, post_list, trans_list=trans_list, log=False, max_workgroup_size=max_workgroup_size)
+    if not fast_decode:
+        t0 = now()
+        score_list, states_list = decoding.decode_profile_opencl(
+            ctx, queue_list, post_list, trans_list=trans_list,
+            log=False, max_workgroup_size=max_workgroup_size
+        )
+        decode_time_list = [(now() - t0) / n_files] * n_files
             
     # Form basecall
+    kmers = network.meta['kmers']
     kmer_path_list = []
     seq_list = []
-    for x in xrange(len(fast5_list)):
-        kmer_path = [kmers[i] for i in states_list[x]]
+    for x, states in enumerate(states_list):
+        kmer_path = [kmers[i] for i in states]
         seq = kmers_to_sequence(kmer_path)
         kmer_path_list.append(kmer_path)
         seq_list.append(seq)
-
-    decode_time = timeit.default_timer() - t3
-    decode_time_list = []
-    for x in xrange(len(fast5_list)):
-        decode_time_list.append(decode_time/len(fast5_list))
     
-    ret = []
-    write_time_list = [0] * len(fast5_list)
     # Write events table
     if write_events:
-        for x in xrange(len(fast5_list)):
-            t4 = timeit.default_timer()
-            events = events_list[x]
-            name = name_list[x]
-            post = post_list[x]
-            kmer_path = kmer_path_list[x]
-            seq = seq_list[x]
-            states = states_list[x]
-            good_events = good_events_list[x] 
-            adder = AddFields(events[good_events])
-            adder.add('model_state', kmer_path,
-                dtype='>S{}'.format(len(kmers[0])))
-            adder.add('p_model_state', np.fromiter(
-                (post[i,j] for i,j in itertools.izip(xrange(len(post)), states)),
-                dtype=float, count=len(post)))
-            adder.add('mp_model_state', np.fromiter(
-                (kmers[i] for i in np.argmax(post, axis=1)),
-                dtype='>S{}'.format(len(kmers[0])), count=len(post)))
-            adder.add('p_mp_model_state', np.max(post, axis=1))
-            adder.add('move', np.array(kmer_overlap(kmer_path)), dtype=int)
-    
-            mid = len(kmers[0]) / 2
-            bases = set(''.join(kmers)) - set('X')
-            for base in bases:
-                cols = np.fromiter((k[mid] == base for k in kmers),
-                    dtype=bool, count=len(kmers))
-                adder.add('p_{}'.format(base), np.sum(post[:, cols], axis=1), dtype=float)
-    
-            events = adder.finalize()
-    
-            with Fast5(fast5, 'a') as fh:
-               base = fh._join_path(
-                   fh.get_analysis_new(__fast5_analysis_name__),
-                   __fast5_section_name__.format(kwargs['section']))
-               fh._add_event_table(events, fh._join_path(base, 'Events'))
-               try:
-                   name = fh.get_read(group=True).attrs['read_id']
-               except:
-                   pass # filename inherited from above
-               fh._add_string_dataset(
-                   '@{}\n{}\n+\n{}\n'.format(name, seq, '!'*len(seq)),
-                   fh._join_path(base, 'Fastq'))
+        kmers_list = (network.meta['kmers'] for _ in xrange(n_files))
+        for data in zip(
+            fast5_list, events_list, good_events_list, kmer_path_list, kmers_list, post_list, states_list
+            ):
+            write_to_file(fast5, events, good_events, kmer_path, kmers, post, states)
  
-            write_time_list[x] = timeit.default_timer() - t4
-   
-    for x in xrange(len(fast5_list)):
-        ret.append((name, seq, score_list[x], len(features), (feature_time_list[x], load_time, network_time_list[x], decode_time_list[x], write_time_list[x])))
-    return ret
+    return [(
+        (name_list[x], seq_list[x], score_list[x], len(features_list[x])),
+        (network_time_list[x], decode_time_list[x])
+    ) for x in xrange(n_files)]
+
 
 def main():
     if len(sys.argv) == 1:
@@ -410,24 +344,6 @@ def main():
         sort_by_size = 'desc' if args.platforms is not None else None
         fast5_files = iterate_fast5(args.input, paths=True, strand_list=args.strand_list, limit=args.limit, sort_by_size=sort_by_size)
 
-    # files_pattern controls grouping of files. First N entries
-    #    are for the N opencl devices. files are sent singly to
-    #    CPUs whilst in groups of args.opencl_input_files to 
-    #    other devices.
-    #files_pattern = [1] * args.jobs
-    #if args.opencl:
-    #    files_pattern[:len(args.platforms)] = [args.opencl_input_files] * len(args.platforms)
-    #fast5_groups = group_by_list(fast5_files, files_pattern) 
-
-    #def create_processes():
-    #    for i, ff in enumerate(fast5_groups):
-    #        if args.opencl and i % args.jobs in xrange(len(args.platforms)):
-    #            vendor,device_id = args.platforms[i%args.jobs].split(':')
-    #            yield ProcessAttr(ff, use_opencl=True, vendor=vendor, device_id=int(device_id))
-    #        else:
-    #            yield ProcessAttr(ff)
-    #pa_gen = create_processes()
-
     fix_args = [
         modelfile
     ]
@@ -451,43 +367,35 @@ def main():
                 (opencl_function, int(n_files))
             )
 
-    t0 = timeit.default_timer()
+    t0 = now()
     n_reads = 0
     n_bases = 0
     n_events = 0
-    timings = [0.0, 0.0, 0.0, 0.0, 0.0]
+    timings = [0.0, 0.0]
 
     with FastaWrite(args.output) as fasta:
         for result in JobQueue(fast5_files, workers):
             if result is None:
                 continue
-            name, basecall, _, n_ev, time = result
+            data, time = result
+            name, basecall, _, n_ev = data
             fasta.write(*(name, basecall))
             n_reads += 1
             n_bases += len(basecall)
             n_events += n_ev
             timings = [x + y for x, y in zip(timings, time)]
-    t1 = timeit.default_timer()
+
+    t1 = now()
     sys.stderr.write('Basecalled {} reads ({} bases, {} events) in {}s (wall time)\n'.format(n_reads, n_bases, n_events, t1 - t0))
     if n_reads > 0:
-        feature, load, network, decoding, events_writing = timings
-        feature /= args.jobs
-        load /= args.jobs
-        network /= args.jobs
+        network, decoding  = timings
         decoding /= args.jobs
-        events_writing /= args.jobs
         sys.stderr.write(
-            #'Profiling\n---------\n'
-            #'Feature generation: {:4.1f}\n'
-            #'Load network: {:4.1f}\n'
             'Run network: {:6.2f} ({:6.3f} kb/s, {:6.3f} kev/s)\n'
             'Decoding:    {:6.2f} ({:6.3f} kb/s, {:6.3f} kev/s)\n'
-            #'Write events: {:6.2f}\n'
             .format(
-                #feature, load,
                 network, n_bases/1000.0/network, n_events/1000.0/network,
                 decoding, n_bases/1000.0/decoding, n_events/1000.0/decoding,
-                #events_writing
             )
         )
 
