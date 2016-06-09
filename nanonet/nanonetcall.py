@@ -70,20 +70,17 @@ def get_parser():
     parser.add_argument("--fast_decode", action=AutoBool, default=False,
         help="Use simple, fast decoder with no transition estimates.")
 
-    parser.add_argument("--opencl", action=AutoBool, default=False,
-        help="Offload computation to GPU using OpenCL.")
-    parser.add_argument("--opencl_input_files", default=1, type=int,
-        help="Number of input fast5 files to be processed simultaneously. For GPU devices that support concurrent kernel execution.")
+    parser.add_argument("--exc_opencl", action=AutoBool, default=False,
+        help="Do not use CPU alongside OpenCL, overrides --jobs.")
     parser.add_argument("--list_platforms", action=AutoBool, default=False,
         help="Output list of available OpenCL GPU platforms.")
     parser.add_argument("--platforms", nargs="+", type=str,
-        help="List of OpenCL GPU platforms and devices to be used in a format VENDOR:DEVICE space separated, i.e. --platforms nvidia:0 amd:0 amd:1.")
+        help="List of OpenCL GPU platforms and devices to be used in a format VENDOR:DEVICE:N_Files space separated, i.e. --platforms nvidia:0:1 amd:0:2 amd:1:2.")
 
     return parser
 
 class ProcessAttr(object):
-    def __init__(self, fast5_files, use_opencl=False, vendor=None, device_id=0):
-        self.fast5_files = fast5_files
+    def __init__(self, use_opencl=False, vendor=None, device_id=0):
         self.use_opencl = use_opencl
         self.vendor = vendor
         self.device_id = device_id
@@ -106,8 +103,9 @@ def list_opencl_platforms():
             print('    Device - Constant Memory:  {0:.0f} KB'.format(device.max_constant_buffer_size/1024))
             print('    Device - Global Memory: {0:.0f} GB'.format(device.global_mem_size/1073741824.0))
     print('\n')
-        
-def process_read(modelfile, pa, min_prob=1e-5, trans=None, post_only=False, write_events=True, fast_decode=False, **kwargs):
+
+
+def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, write_events=True, fast_decode=False, **kwargs):
     """Run neural network over a set of fast5 files
 
     :param modelfile: neural network specification.
@@ -115,13 +113,116 @@ def process_read(modelfile, pa, min_prob=1e-5, trans=None, post_only=False, writ
     :param post_only: return only the posterior matrix
     :param **kwargs: kwargs of make_basecall_input_multi
     """
+    #sys.stderr.write("CPU process\n processing {}\n".format(fast5))
+
     t0 = timeit.default_timer()
     network = np.load(modelfile).item()
     t1 = timeit.default_timer()
     load_time = t1 - t0
 
     kwargs['window'] = network.meta['window']
-    fast5_list = pa.fast5_files
+
+    try:
+        it = make_basecall_input_multi((fast5,), **kwargs)
+        if write_events:
+            name, features, events = it.next()
+        else:
+            name, features, _ = it.next()
+    except Exception as e:
+        return None
+    t2 = timeit.default_timer()
+    feature_time = t2 - t1
+
+    post = network.run(features.astype(nn.dtype))
+    t3 = timeit.default_timer()
+    network_time = t3 - t2
+
+    kmers = network.meta['kmers']
+    # Do we have an XXX kmer? Strip out events where XXX most likely,
+    #    and XXX states entirely
+    if kmers[-1] == 'X'*len(kmers[-1]):
+        bad_kmer = post.shape[1] - 1
+        max_call = np.argmax(post, axis=1)
+        good_events = (max_call != bad_kmer)
+        post = post[good_events]
+        post = post[:, :-1]
+        if len(post) == 0:
+            return None
+
+    weights = np.sum(post, axis=1).reshape((-1,1))
+    post /= weights
+    if post_only:
+        return post
+
+    post = min_prob + (1.0 - min_prob) * post
+    if fast_decode:
+        score, states = decoding.decode_homogenous(post, log=False)
+    else:
+        trans = decoding.estimate_transitions(post, trans=trans)
+        score, states = decoding.decode_profile(post, trans=np.log(__ETA__ + trans), log=False)
+
+    # Form basecall
+    kmer_path = [kmers[i] for i in states]
+    seq = kmers_to_sequence(kmer_path)
+    t4 = timeit.default_timer()
+    decode_time = t4 -t3
+
+    # Write events table
+    if write_events:
+        adder = AddFields(events[good_events])
+        adder.add('model_state', kmer_path,
+            dtype='>S{}'.format(len(kmers[0])))
+        adder.add('p_model_state', np.fromiter(
+            (post[i,j] for i,j in itertools.izip(xrange(len(post)), states)),
+            dtype=float, count=len(post)))
+        adder.add('mp_model_state', np.fromiter(
+            (kmers[i] for i in np.argmax(post, axis=1)),
+            dtype='>S{}'.format(len(kmers[0])), count=len(post)))
+        adder.add('p_mp_model_state', np.max(post, axis=1))
+        adder.add('move', np.array(kmer_overlap(kmer_path)), dtype=int)
+
+        mid = len(kmers[0]) / 2
+        bases = set(''.join(kmers)) - set('X')
+        for base in bases:
+            cols = np.fromiter((k[mid] == base for k in kmers),
+                dtype=bool, count=len(kmers))
+            adder.add('p_{}'.format(base), np.sum(post[:, cols], axis=1), dtype=float)
+
+        events = adder.finalize()
+
+        with Fast5(fast5, 'a') as fh:
+           base = fh._join_path(
+               fh.get_analysis_new(__fast5_analysis_name__),
+               __fast5_section_name__.format(kwargs['section']))
+           fh._add_event_table(events, fh._join_path(base, 'Events'))
+           try:
+               name = fh.get_read(group=True).attrs['read_id']
+           except:
+               pass # filename inherited from above
+           fh._add_string_dataset(
+               '@{}\n{}\n+\n{}\n'.format(name, seq, '!'*len(seq)),
+               fh._join_path(base, 'Fastq'))
+    write_time = timeit.default_timer() - t4
+
+    return (name, seq, score, len(features), (feature_time, load_time, network_time, decode_time, write_time))
+
+        
+def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, post_only=False, write_events=True, fast_decode=False, **kwargs):
+    """Run neural network over a set of fast5 files
+
+    :param modelfile: neural network specification.
+    :param fast5: read file to process
+    :param post_only: return only the posterior matrix
+    :param **kwargs: kwargs of make_basecall_input_multi
+    """
+    #sys.stderr.write("OpenCL process\n processing {}\n{}\n".format(fast5_list, pa.__dict__))
+
+    t0 = timeit.default_timer()
+    network = np.load(modelfile).item()
+    t1 = timeit.default_timer()
+    load_time = t1 - t0
+
+    kwargs['window'] = network.meta['window']
     use_opencl = pa.use_opencl
     
     post_list = []
@@ -144,6 +245,7 @@ def process_read(modelfile, pa, min_prob=1e-5, trans=None, post_only=False, writ
             features_list.append(features.astype(nn.dtype))
             name_list.append(name)
         except Exception as e:
+            print str(e)
             return None
         t2 = timeit.default_timer()
         feature_time_list.append(t2 - t1)
@@ -275,7 +377,7 @@ def process_read(modelfile, pa, min_prob=1e-5, trans=None, post_only=False, writ
                    fh._join_path(base, 'Fastq'))
  
             write_time_list[x] = timeit.default_timer() - t4
-    
+   
     for x in xrange(len(fast5_list)):
         ret.append((name, seq, score_list[x], len(features), (feature_time_list[x], load_time, network_time_list[x], decode_time_list[x], write_time_list[x])))
     return ret
@@ -297,14 +399,6 @@ def main():
             sys.stderr.write("No 'section' found in modelfile, try specifying --section.\n")
             sys.exit(1)
                  
-    fix_args = [
-        modelfile
-    ]
-    fix_kwargs = {a: getattr(args, a) for a in ( 
-        'min_len', 'max_len', 'section',
-        'event_detect', 'fast_decode',
-        'write_events'
-    )}
 
             
     #TODO: handle case where there are pre-existing files.
@@ -313,47 +407,66 @@ def main():
         from nanonet.watcher import Fast5Watcher
         fast5_files = Fast5Watcher(args.input, timeout=args.watch)
     else:
-        sort_by_size = 'desc' if args.opencl else None
+        sort_by_size = 'desc' if args.platforms is not None else None
         fast5_files = iterate_fast5(args.input, paths=True, strand_list=args.strand_list, limit=args.limit, sort_by_size=sort_by_size)
 
     # files_pattern controls grouping of files. First N entries
     #    are for the N opencl devices. files are sent singly to
     #    CPUs whilst in groups of args.opencl_input_files to 
     #    other devices.
-    files_pattern = [1] * args.jobs
-    if args.opencl:
-        files_pattern[:len(args.platforms)] = [args.opencl_input_files] * len(args.platforms)
-    fast5_groups = group_by_list(fast5_files, files_pattern) 
+    #files_pattern = [1] * args.jobs
+    #if args.opencl:
+    #    files_pattern[:len(args.platforms)] = [args.opencl_input_files] * len(args.platforms)
+    #fast5_groups = group_by_list(fast5_files, files_pattern) 
 
-    def create_processes():
-        for i, ff in enumerate(fast5_groups):
-            if args.opencl and i % args.jobs in xrange(len(args.platforms)):
-                vendor,device_id = args.platforms[i%args.jobs].split(':')
-                yield ProcessAttr(ff, use_opencl=True, vendor=vendor, device_id=int(device_id))
-            else:
-                yield ProcessAttr(ff)
-    pa_gen = create_processes()
+    #def create_processes():
+    #    for i, ff in enumerate(fast5_groups):
+    #        if args.opencl and i % args.jobs in xrange(len(args.platforms)):
+    #            vendor,device_id = args.platforms[i%args.jobs].split(':')
+    #            yield ProcessAttr(ff, use_opencl=True, vendor=vendor, device_id=int(device_id))
+    #        else:
+    #            yield ProcessAttr(ff)
+    #pa_gen = create_processes()
+
+    fix_args = [
+        modelfile
+    ]
+    fix_kwargs = {a: getattr(args, a) for a in ( 
+        'min_len', 'max_len', 'section',
+        'event_detect', 'fast_decode',
+        'write_events'
+    )}
+   
+    workers = [] 
+    if not args.exc_opencl:
+        cpu_function = partial(process_read, *fix_args, **fix_kwargs)
+        workers.extend([(cpu_function, None)] * args.jobs)
+    if args.platforms is not None:
+        for platform in args.platforms:
+            vendor, device_id, n_files = platform.split(':')
+            pa = ProcessAttr(use_opencl=True, vendor=vendor, device_id=int(device_id))
+            fix_args.append(pa)
+            opencl_function = partial(process_read_opencl, *fix_args, **fix_kwargs)
+            workers.append(
+                (opencl_function, int(n_files))
+            )
 
     t0 = timeit.default_timer()
     n_reads = 0
     n_bases = 0
     n_events = 0
     timings = [0.0, 0.0, 0.0, 0.0, 0.0]
-    
-    function = partial(process_read, *fix_args, **fix_kwargs)
-    workers = [(function, None)] * args.jobs
 
     with FastaWrite(args.output) as fasta:
-        for ret in JobQueue(pa_gen, workers):
-            if ret is None:
+        for result in JobQueue(fast5_files, workers):
+            if result is None:
                 continue
-            for result in ret:
-                name, basecall, _, n_ev, time = result
-                fasta.write(*(name, basecall))
-                n_reads += 1
-                n_bases += len(basecall)
-                n_events += n_ev
-                timings = [x + y for x, y in zip(timings, time)]
+            name, basecall, _, n_ev, time = result
+            fasta.write(*(name, basecall))
+            n_reads += 1
+            n_bases += len(basecall)
+            n_events += n_ev
+            timings = [x + y for x, y in zip(timings, time)]
     t1 = timeit.default_timer()
     sys.stderr.write('Basecalled {} reads ({} bases, {} events) in {}s (wall time)\n'.format(n_reads, n_bases, n_events, t1 - t0))
     if n_reads > 0:
