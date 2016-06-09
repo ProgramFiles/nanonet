@@ -155,7 +155,7 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, w
 
     # Write events table
     if write_events:
-        write_to_file(fast5, events, good_events, kmer_path, kmers, post, states)
+        write_to_file(fast5, events, kwargs['section'], seq, good_events, kmer_path, kmers, post, states)
 
     return (name, seq, score, len(features)), (network_time, decode_time)
 
@@ -178,7 +178,7 @@ def clean_post(post, kmers, min_prob):
     return post, good_events
 
 
-def write_to_file(fast5, events, good_events, kmer_path, kmers, post, states):
+def write_to_file(fast5, events, section, seq, good_events, kmer_path, kmers, post, states):
     adder = AddFields(events[good_events])
     adder.add('model_state', kmer_path,
         dtype='>S{}'.format(len(kmers[0])))
@@ -203,12 +203,12 @@ def write_to_file(fast5, events, good_events, kmer_path, kmers, post, states):
     with Fast5(fast5, 'a') as fh:
        base = fh._join_path(
            fh.get_analysis_new(__fast5_analysis_name__),
-           __fast5_section_name__.format(kwargs['section']))
+           __fast5_section_name__.format(section))
        fh._add_event_table(events, fh._join_path(base, 'Events'))
        try:
            name = fh.get_read(group=True).attrs['read_id']
        except:
-           pass # filename inherited from above
+           name = fh.filename_short
        fh._add_string_dataset(
            '@{}\n{}\n+\n{}\n'.format(name, seq, '!'*len(seq)),
            fh._join_path(base, 'Fastq'))
@@ -227,26 +227,17 @@ def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, wr
     network = np.load(modelfile).item()
     kwargs['window'] = network.meta['window']
 
-    n_files = len(fast5_list)    
+    # Get features
+    n_files = len(fast5_list)
 
     # Get features
-    features_list = []
-    events_list = []
-    name_list = []    
-    for fast5 in fast5_list:
-        try:
-            it = make_basecall_input_multi((fast5,), **kwargs)
-            if write_events:
-                name, features, events = it.next()
-                events_list.append(events)
-            else:
-                name, features, _ = it.next()
-            features_list.append(features.astype(nn.dtype))
-            name_list.append(name)
-        except Exception as e:
-            # TODO: handle single failures more elegantly
-            print str(e)
-            return [None] * n_files
+    name_list, features_list, events_list = zip(*(
+        make_basecall_input_multi(fast5_list, **kwargs)
+    ))
+    if not write_events:
+        events_list = None
+    features_list = [x.astype(nn.dtype) for x in features_list] 
+    n_files = len(features_list) # might be different for input length
 
     # Set up OpenCL            
     platform = [
@@ -304,16 +295,23 @@ def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, wr
     
     # Write events table
     if write_events:
+        section_list = (kwargs['section'] for _ in xrange(n_files))
         kmers_list = (network.meta['kmers'] for _ in xrange(n_files))
         for data in zip(
-            fast5_list, events_list, good_events_list, kmer_path_list, kmers_list, post_list, states_list
+            fast5_list, events_list, section_list, seq_list,
+            good_events_list, kmer_path_list, kmers_list, post_list, states_list
             ):
-            write_to_file(fast5, events, good_events, kmer_path, kmers, post, states)
- 
-    return [(
-        (name_list[x], seq_list[x], score_list[x], len(features_list[x])),
-        (network_time_list[x], decode_time_list[x])
-    ) for x in xrange(n_files)]
+            write_to_file(*data)
+
+    # Construst a sequences of objects as process_read returns 
+    data = zip(name_list, seq_list, score_list, (len(x) for x in features_list))
+    timings = zip(network_time_list, decode_time_list)
+    ret = zip(data, timings)
+    if n_files < len(fast5_list):
+        # pad as if failed in process_read
+        ret.extend([None]*(len(fast5_list) - len(n_files)))
+    return ret
+
 
 
 def main():
