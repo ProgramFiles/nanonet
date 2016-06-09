@@ -87,13 +87,13 @@ class ProcessAttr(object):
 
 def list_opencl_platforms():
     print('\n' + '=' * 60 + '\nOpenCL Platforms and Devices')
-    platforms = [p for p in cl.get_platforms() if p.get_devices(device_type=cl.device_type.ALL)]
+    platforms = [p for p in cl.get_platforms() if p.get_devices(device_type=cl.device_type.GPU)]
     for platform in platforms:
         print('=' * 60)
         print('Platform - Name:  ' + platform.name)
         print('Platform - Vendor:  ' + platform.vendor)
         print('Platform - Version:  ' + platform.version)
-        for device in platform.get_devices(device_type=cl.device_type.ALL):  # Print each device per-platform
+        for device in platform.get_devices(device_type=cl.device_type.GPU):  # Print each device per-platform
             print('    ' + '-' * 56)
             print('    Device - Name:  ' + device.name)
             print('    Device - Type:  ' + cl.device_type.to_string(device.type))
