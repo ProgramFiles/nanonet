@@ -80,14 +80,20 @@ class JobQueue(object):
         self.start_server()
         workers = [Process(target=partial(self._worker, f[0], f[1])) for f in self.functors]
 
-        for w in workers:
-            w.start()
+        try:
+            for w in workers:
+                w.start()
 
-        for result in self.server.imap_unordered(self.jobs):
-            yield result
+            for result in self.server.imap_unordered(self.jobs):
+                yield result
 
-        for w in workers:
-            w.terminate()
+            for w in workers:
+                w.terminate()
+        except KeyboardInterrupt:
+            for w in workers:
+                w.terminate()
+            self.server.manager.join()
+            self.server.manager.shutdown()
 
     def start_server(self, ports=(5000,6000)):
         self.authkey = str(uuid4())
