@@ -445,8 +445,8 @@ def main():
         for platform in args.platforms:
             vendor, device_id, n_files = platform.split(':')
             pa = ProcessAttr(use_opencl=True, vendor=vendor, device_id=int(device_id))
-            fix_args.append(pa)
-            opencl_function = partial(process_read_opencl, *fix_args, **fix_kwargs)
+            fargs = fix_args + [pa]
+            opencl_function = partial(process_read_opencl, *fargs, **fix_kwargs)
             workers.append(
                 (opencl_function, int(n_files))
             )
