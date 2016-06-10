@@ -16,7 +16,7 @@ import pyopencl as cl
 from functools import partial
 
 from nanonet import decoding, nn
-from nanonet.fast5 import Fast5, iterate_fast5
+from nanonet.fast5 import Fast5, iterate_fast5, short_names
 from nanonet.util import random_string, conf_line, FastaWrite, tang_imap, all_nmers, kmers_to_sequence, kmer_overlap, group_by_list, AddFields
 from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
 from nanonet.features import make_basecall_input_multi
@@ -123,9 +123,9 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, w
     try:
         it = make_basecall_input_multi((fast5,), **kwargs)
         if write_events:
-            name, features, events = it.next()
+            fname, features, events = it.next()
         else:
-            name, features, _ = it.next()
+            fname, features, _ = it.next()
     except Exception as e:
         return None
 
@@ -157,7 +157,7 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, w
     if write_events:
         write_to_file(fast5, events, kwargs['section'], seq, good_events, kmer_path, kmers, post, states)
 
-    return (name, seq, score, len(features)), (network_time, decode_time)
+    return (fname, seq, score, len(features)), (network_time, decode_time)
 
 
 def clean_post(post, kmers, min_prob):
@@ -228,16 +228,15 @@ def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, wr
     kwargs['window'] = network.meta['window']
 
     # Get features
-    n_files = len(fast5_list)
-
-    # Get features
-    name_list, features_list, events_list = zip(*(
+    file_list, features_list, events_list = zip(*(
         make_basecall_input_multi(fast5_list, **kwargs)
     ))
+    features_list = [x.astype(nn.dtype) for x in features_list] 
     if not write_events:
         events_list = None
-    features_list = [x.astype(nn.dtype) for x in features_list] 
-    n_files = len(features_list) # might be different for input length
+    n_files = len(file_list) # might be different for input length
+    if n_files == 0:
+        return [None] * len(fast5_list)
 
     # Set up OpenCL            
     platform = [
@@ -287,7 +286,7 @@ def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, wr
     kmers = network.meta['kmers']
     kmer_path_list = []
     seq_list = []
-    for x, states in enumerate(states_list):
+    for states in states_list:
         kmer_path = [kmers[i] for i in states]
         seq = kmers_to_sequence(kmer_path)
         kmer_path_list.append(kmer_path)
@@ -298,20 +297,19 @@ def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, wr
         section_list = (kwargs['section'] for _ in xrange(n_files))
         kmers_list = (network.meta['kmers'] for _ in xrange(n_files))
         for data in zip(
-            fast5_list, events_list, section_list, seq_list,
+            file_list, events_list, section_list, seq_list,
             good_events_list, kmer_path_list, kmers_list, post_list, states_list
             ):
             write_to_file(*data)
 
     # Construst a sequences of objects as process_read returns 
-    data = zip(name_list, seq_list, score_list, (len(x) for x in features_list))
+    data = zip(file_list, seq_list, score_list, (len(x) for x in features_list))
     timings = zip(network_time_list, decode_time_list)
     ret = zip(data, timings)
     if n_files < len(fast5_list):
         # pad as if failed in process_read
-        ret.extend([None]*(len(fast5_list) - len(n_files)))
+        ret.extend([None]*(len(fast5_list) - n_files))
     return ret
-
 
 
 def main():
@@ -376,7 +374,8 @@ def main():
             if result is None:
                 continue
             data, time = result
-            name, basecall, _, n_ev = data
+            fname, basecall, _, n_ev = data
+            name, _ = short_names(fname) 
             fasta.write(*(name, basecall))
             n_reads += 1
             n_bases += len(basecall)

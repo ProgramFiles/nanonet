@@ -11,6 +11,15 @@ import numpy.lib.recfunctions as nprf
 from nanonet.util import docstring_parameter
 
 
+def short_names(fname):
+    filename_short = os.path.splitext(os.path.basename(fname))[0]
+    short_name_match = re.search(re.compile(r'ch\d+_file\d+'), filename_short)
+    name_short = filename_short
+    if short_name_match:
+        name_short = short_name_match.group()
+    return filename_short, name_short
+
+
 class Fast5(h5py.File):
     """Class for grabbing data from single read fast5 files. Many attributes/
     groups are assumed to exist currently (we're concerned mainly with reading).
@@ -68,11 +77,7 @@ class Fast5(h5py.File):
         # Backward compat.
         self.sample_rate = self.sampling_rate
 
-        self.filename_short = os.path.splitext(os.path.basename(self.filename))[0]
-        short_name_match = re.search(re.compile(r'ch\d+_file\d+'), self.filename_short)
-        self.name_short = self.filename_short
-        if short_name_match:
-            self.name_short = short_name_match.group()
+        self.filename_short, self.name_short = short_names(self.filename)
 
     @classmethod
     def New(cls, fname, read='a', tracking_id={}, context_tags={}, channel_id={}):
