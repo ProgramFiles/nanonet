@@ -85,7 +85,7 @@ def worker(function, take_n, port, authkey, timeout=0.5):
     if take_n is None:
         _singleton_worker(function, job_q, job_q_closed, result_q, timeout=timeout)
     else:
-        multi_worker(function, take_n, job_q, job_q_closed, result_q, timeout=timeout)
+        _multi_worker(function, take_n, job_q, job_q_closed, result_q, timeout=timeout)
 
 
 def _singleton_worker(function, job_q, job_q_closed, result_q, timeout=0.5):
