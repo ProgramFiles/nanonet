@@ -144,7 +144,7 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, w
     if fast_decode:
         score, states = decoding.decode_homogenous(post, log=False)
     else:
-        trans = decoding.estimate_transitions(post, trans=trans)
+        trans = decoding.fast_estimate_transitions(post, trans=trans)
         score, states = decoding.decode_profile(post, trans=np.log(__ETA__ + trans), log=False)
     decode_time = now() - t0
 
@@ -262,27 +262,27 @@ def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, wr
     ))
 
     # Decode kmers
-    trans_list = [None] * n_files
-    score_list = [None] * n_files
-    states_list = [None] * n_files
-    decode_time_list = []
-    for x, post in enumerate(post_list):
-        if fast_decode:
-            t0 = now()
-            score_list[x], states_list[x] = decoding.decode_homogenous(post, log=False)
-            decode_time_list.append(now() - t0)
-        else:
-            trans_list[x] = np.log(__ETA__ + decoding.estimate_transitions(post, trans=trans))
-    
-    if not fast_decode:
+    t0 = now()
+    if fast_decode:
+        # actually this is slower, but we want to run the same algorithm
+        #   in the case of heterogeneous computer resource.
         t0 = now()
+        score_list, states_list = zip(*(
+            decoding.decode_homogenous(post, log=False) for post in post_list
+        ))
+    else:
+        t0 = now()
+        trans_list = [np.log(__ETA__ +
+            decoding.fast_estimate_transitions(post, trans=trans))
+            for post in post_list]
         score_list, states_list = decoding.decode_profile_opencl(
             ctx, queue_list, post_list, trans_list=trans_list,
             log=False, max_workgroup_size=max_workgroup_size
         )
-        decode_time_list = [(now() - t0) / n_files] * n_files
+    decode_time_list = [(now() - t0) / n_files] * n_files
             
     # Form basecall
+    t0 = now()
     kmers = network.meta['kmers']
     kmer_path_list = []
     seq_list = []
@@ -291,7 +291,7 @@ def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, wr
         seq = kmers_to_sequence(kmer_path)
         kmer_path_list.append(kmer_path)
         seq_list.append(seq)
-    
+
     # Write events table
     if write_events:
         section_list = (kwargs['section'] for _ in xrange(n_files))
@@ -309,6 +309,7 @@ def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, wr
     if n_files < len(fast5_list):
         # pad as if failed in process_read
         ret.extend([None]*(len(fast5_list) - n_files))
+
     return ret
 
 

@@ -169,11 +169,11 @@ def decode_simple(post, log=False, slip=0.0):
 def decode_homogenous(post, log=False, n_bases=4):
     if not log:
         post = np.log(_ETA + post)
-    post = post.astype('f8')
+    post = post.astype(np.float32)
 
     func = nanonetdecode.decode_path
-    func.restype = c_double
-    func.argtypes = [ndpointer(dtype='f8', flags='CONTIGUOUS'),
+    func.restype = np.float32
+    func.argtypes = [ndpointer(dtype=np.float32, flags='CONTIGUOUS'),
                      c_size_t, c_size_t, c_size_t]
     score = func(post, post.shape[0], n_bases, post.shape[1])
     states = post[:,0].astype(int)
@@ -188,6 +188,7 @@ def estimate_transitions(post, trans=None):
     assert trans is None or len(trans) == 3, 'Incorrect number of transitions'
     res = np.zeros((len(post), 3))
     res[:] = _ETA
+
     for ev in range(1, len(post)):
         stay = np.sum(post[ev-1] * post[ev])
         p = post[ev].reshape((-1, _NSTEP))
@@ -204,6 +205,32 @@ def estimate_transitions(post, trans=None):
     res /= np.sum(res, axis=1).reshape((-1,1))
 
     return res
+
+def fast_estimate_transitions(post, trans=None, n_bases=4):
+    """  Naive estimate of transition behaviour from posteriors
+    :param post: posterior probabilities of kmers by event.
+    :param trans: prior belief of transition behaviour (None = use global estimate)
+    """
+
+    assert trans is None or len(trans) == 3, 'Incorrect number of transitions'
+    res = np.empty((len(post), 3), dtype=dtype)
+    res.fill(_ETA)
+
+    func = nanonetdecode.estimate_transitions
+    func.restype = None
+    func.argtypes = [ndpointer(dtype=np.float32, flags='CONTIGUOUS'), 
+                     ndpointer(dtype=np.float32, flags='CONTIGUOUS'),
+                     c_size_t, c_size_t, c_size_t]
+    func(post, res, post.shape[0], n_bases, post.shape[1])
+
+    if trans is None:
+        trans = np.sum(res, axis=0)
+        trans /= np.sum(trans)
+
+    res *= trans
+    res /= np.sum(res, axis=1).reshape((-1,1))
+    return res
+
 
 kernel_code = """
 #if __OPENCL_VERSION__ <= CL_VERSION_1_1

@@ -9,7 +9,9 @@
 #include "module.h"
 #include "stdint.h"
 
-typedef double ftype;
+#include <iostream>
+
+typedef float ftype;
 using namespace std;
 
 
@@ -80,7 +82,7 @@ extern "C" void viterbi_update(
 }
 
 
-extern "C" MODULE_API double decode_path(ftype * logpost, const size_t num_events, const size_t num_bases, const size_t num_kmers){
+extern "C" MODULE_API ftype decode_path(ftype * logpost, const size_t num_events, const size_t num_bases, const size_t num_kmers){
   assert(NULL!=logpost);
   assert(num_events>0);
   assert(num_bases>0);
@@ -146,3 +148,58 @@ extern "C" MODULE_API double decode_path(ftype * logpost, const size_t num_event
 }
 
 
+extern "C" MODULE_API void estimate_transitions(ftype* post, ftype* trans, const size_t num_events, const size_t num_bases, const size_t num_kmers){
+  assert(NULL!=post);
+  assert(num_events>0);
+  assert(num_bases>0);
+  assert(num_kmers>0);
+  const size_t num_bases_sq = num_bases * num_bases;
+
+  //std::cerr << "num_events " << num_events << std::endl;
+  //std::cerr << "num_bases " << num_bases << std::endl;
+  //std::cerr << "num_kmers " << num_kmers << std::endl;
+
+  for (size_t ev = 1; ev < num_events; ++ev) {
+    //std::cerr << "event " << ev << std::endl;
+    ftype stay_sum = 0.f;
+    ftype step_sum = 0.f;
+    ftype skip_sum = 0.f;
+    const size_t idx1 = ev * num_kmers;
+    const size_t idx0 = idx1 - num_kmers; 
+    for (size_t i = 0; i < num_kmers / num_bases_sq; ++i) {
+      ftype sum16 = 0.f;
+      //if(ev == 1537){std::cerr << i << " ";} 
+      for (size_t j = 0; j < num_bases; ++j) {
+        //if(ev == 1536){std::cerr << j << ":";}
+        ftype sum4 = 0.f;
+        for (size_t k = 0; k < num_bases; ++k) {
+          size_t kmer = i * num_bases_sq + j * num_bases + k;
+          ftype p = post[idx1 + kmer];
+          stay_sum += post[idx0 + kmer] * p;
+          sum4 += p;
+        }
+        for (size_t step_from = num_bases * i + j; step_from < num_kmers; step_from += num_kmers / num_bases) {
+          step_sum += sum4 * post[idx0 + step_from];
+        }
+        sum16 += sum4;
+      }
+      //if(ev == 1536){std::cerr << std::endl << "peekaboo" << std::endl;}
+      for (size_t skip_from = i; skip_from < num_kmers; skip_from += num_kmers / num_bases_sq) {
+        skip_sum += sum16 * post[idx0 + skip_from];
+      }
+      //if(ev == 1536){std::cerr << std::endl << "pikachu?" << std::endl;}
+    }
+    //std::cerr << "done" <<std::endl;
+    //std::cerr << ev << " " << stay_sum << " " << step_sum << " " << skip_sum << std::endl;
+    step_sum *= 0.25f;
+    skip_sum *= 0.0625f;
+    trans[(ev-1) * 3] = stay_sum;
+    trans[(ev-1) * 3 + 1] = step_sum;
+    trans[(ev-1) * 3 + 2] = skip_sum;
+    //std::cerr << "eehhhh?" << std::endl;
+    //std::cerr << ev << " " << stay_sum << " " << step_sum << " " << skip_sum << std::endl;
+    if(num_events -ev < 10){
+      //std::cout << "nearing end" << num_events << " " << ev << std::endl;
+    }
+  }
+}
