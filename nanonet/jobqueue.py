@@ -10,6 +10,8 @@ from myriad.managers import make_client
 
 from nanonet.util import stderr_redirected
 
+__timeout__ = 0.5
+__worker_startup_sleep__ = 2
 
 class JobQueue(object):
 
@@ -34,7 +36,7 @@ class JobQueue(object):
             for w in workers:
                 w.start()
 
-            for result in self.server.imap_unordered(self.jobs):
+            for result in self.server.imap_unordered(self.jobs, timeout=__timeout__):
                 yield result
 
             for w in workers:
@@ -67,7 +69,7 @@ class JobQueue(object):
 # On *nix the following could be part of the class above, but not on windows:
 #    https://docs.python.org/2/library/multiprocessing.html#windows
 
-def worker(function, take_n, port, authkey, timeout=0.5):
+def worker(function, take_n, port, authkey, timeout=__timeout__):
     """Worker function for JobQueue. Dispatches to singleton_worker or
     multi_worker as appropriate.
 
@@ -76,7 +78,7 @@ def worker(function, take_n, port, authkey, timeout=0.5):
         case of None indicates function takes a single item to produce a single
         result.
     """
-    sleep(2) # nasty, allows all workers to come up before iteration begins
+    sleep(__worker_startup_sleep__) # nasty, allows all workers to come up before iteration begins
     manager = make_client('localhost', port, authkey)
     job_q = manager.get_job_q()
     job_q_closed = manager.q_closed()
@@ -88,7 +90,7 @@ def worker(function, take_n, port, authkey, timeout=0.5):
         _multi_worker(function, take_n, job_q, job_q_closed, result_q, timeout=timeout)
 
 
-def _singleton_worker(function, job_q, job_q_closed, result_q, timeout=0.5):
+def _singleton_worker(function, job_q, job_q_closed, result_q, timeout=__timeout__):
     while True:
         try:
             job = job_q.get_nowait()
@@ -100,7 +102,7 @@ def _singleton_worker(function, job_q, job_q_closed, result_q, timeout=0.5):
         sleep(timeout)
 
 
-def _multi_worker(function, take_n, job_q, job_q_closed, result_q, timeout=0.5):
+def _multi_worker(function, take_n, job_q, job_q_closed, result_q, timeout=__timeout__):
     while True:
         jobs = []
         try:
