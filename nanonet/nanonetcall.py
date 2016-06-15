@@ -135,12 +135,12 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, w
     network_time = now() - t0
 
     # Manipulate posterior matrix
-    t0 = now()
     post, good_events = clean_post(post, network.meta['kmers'], min_prob)
     if post_only:
         return post
 
     # Decode kmers
+    t0 = now()
     if fast_decode:
         score, states = decoding.decode_homogenous(post, log=False)
     else:
@@ -223,13 +223,11 @@ def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, wr
     :param **kwargs: kwargs of make_basecall_input_multi
     """
     #sys.stderr.write("OpenCL process\n processing {}\n{}\n".format(fast5_list, pa.__dict__))
-    start_time = now()
 
     network = np.load(modelfile).item()
     kwargs['window'] = network.meta['window']
 
     # Get features
-    t0 = now()
     try:
         file_list, features_list, events_list = zip(*(
             make_basecall_input_multi(fast5_list, **kwargs)
@@ -240,10 +238,8 @@ def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, wr
     if not write_events:
         events_list = None
     n_files = len(file_list) # might be different for input length
-    t1 = now(); print "features", t1 - t0, t1 - start_time
 
     # Set up OpenCL
-    t0 = now()
     platform = [
         p for p in cl.get_platforms()
         if p.get_devices(device_type=cl.device_type.GPU)
@@ -255,32 +251,26 @@ def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, wr
     max_workgroup_size = device.get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
     ctx = cl.Context([device]) 
     queue_list = [cl.CommandQueue(ctx)] * n_files
-    t1 = now(); print "setup opencl", t1 - t0, t1 - start_time
 
     # Run network
     t0 = now()
     post_list = network.run(features_list, ctx, queue_list)
     network_time_list = [(now() - t0) / n_files] * n_files
-    t1 = now(); print "network", t1 - t0, t1 - start_time
 
     # Manipulate posterior
-    t0 = now()
     post_list, good_events_list = zip(*(
         clean_post(post, network.meta['kmers'], min_prob) for post in post_list
     ))
-    t1 = now(); print "clean post", t1 - t0, t1 - start_time
 
     # Decode kmers
     t0 = now()
     if fast_decode:
         # actually this is slower, but we want to run the same algorithm
         #   in the case of heterogeneous computer resource.
-        t0 = now()
         score_list, states_list = zip(*(
             decoding.decode_homogenous(post, log=False) for post in post_list
         ))
     else:
-        t0 = now()
         trans_list = [np.log(__ETA__ +
             decoding.fast_estimate_transitions(post, trans=trans))
             for post in post_list]
@@ -289,10 +279,8 @@ def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, wr
             log=False, max_workgroup_size=max_workgroup_size
         )
     decode_time_list = [(now() - t0) / n_files] * n_files
-    t1 = now(); print "decode", t1 - t0, t1 - start_time
             
     # Form basecall
-    t0 = now()
     kmers = network.meta['kmers']
     kmer_path_list = []
     seq_list = []
@@ -301,7 +289,6 @@ def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, wr
         seq = kmers_to_sequence(kmer_path)
         kmer_path_list.append(kmer_path)
         seq_list.append(seq)
-    t1 = now(); print "form basecall", t1 - t0, t1 - start_time
 
     # Write events table
     if write_events:
@@ -313,7 +300,6 @@ def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, wr
             ):
             write_to_file(*data)
 
-    t0 = now()
     # Construst a sequences of objects as process_read returns
     data = zip(file_list, seq_list, score_list, (len(x) for x in features_list))
     timings = zip(network_time_list, decode_time_list)
@@ -321,9 +307,6 @@ def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, wr
     if n_files < len(fast5_list):
         # pad as if failed in process_read
         ret.extend([None]*(len(fast5_list) - n_files))
-    t1 = now(); print "finish off", t1 - t0, t1 - start_time
-    print
-    print
     return ret
 
 
@@ -377,7 +360,6 @@ def main():
                 (opencl_function, int(n_files))
             )
 
-    t0 = now()
     n_reads = 0
     n_bases = 0
     n_events = 0
@@ -392,12 +374,13 @@ def main():
         # single opencl device
         #    need to wrap files in lists, and unwrap results
         worker, n_files = workers[0]
-        fast5_files = group_by_list(fast5_files, [n_files]) #nasty scoping
-        mapper = itertools.chain(*itertools.imap(worker, fast5_files))
+        fast5_files = group_by_list(fast5_files, [n_files])
+        mapper = itertools.chain.from_iterable(itertools.imap(worker, fast5_files))
     else:
         # Heterogeneous compute
         mapper = JobQueue(fast5_files, workers)
 
+    t0 = now()
     with FastaWrite(args.output) as fasta:
         for result in mapper:
             if result is None:
