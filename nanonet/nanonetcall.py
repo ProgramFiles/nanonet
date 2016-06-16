@@ -369,7 +369,7 @@ def main():
     if args.platforms is None:
         # just CPU
         worker, n_files = workers[0]
-        mapper = tang_imap(worker, fast5_files, threads = args.jobs)
+        mapper = tang_imap(worker, fast5_files, threads=args.jobs, unordered=True)
     elif len(workers) == 1:
         # single opencl device
         #    need to wrap files in lists, and unwrap results
