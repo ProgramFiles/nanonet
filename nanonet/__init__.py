@@ -7,6 +7,11 @@ __version__ = '1.4.1'
 __version_info__ = tuple([int(num) for num in __version__.split('.')])
 
 try:
+    import pyopencl as cl
+except ImportError:
+    cl = None
+
+try:
     __currennt_exe__ = os.path.abspath(os.environ['CURRENNT'])
 except KeyError:
     __currennt_exe__ = 'currennt'

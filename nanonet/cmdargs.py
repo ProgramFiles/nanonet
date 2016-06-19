@@ -6,7 +6,7 @@ import multiprocessing
 class FileExist(argparse.Action):
     """Check if the input file exist."""
     def __call__(self, parser, namespace, values, option_string=None):
-        if not os.path.exists(values):
+        if values is not None and not os.path.exists(values):
              raise RuntimeError("File/path for '{}' does not exist, {}".format(self.dest, values))
         setattr(namespace, self.dest, values)
 

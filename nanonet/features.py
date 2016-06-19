@@ -81,7 +81,6 @@ def make_basecall_input_multi(fast5_files, section='template', window=[-1, 0, 1]
     library
     """
     for f in fast5_files:
-        filename = os.path.basename(f)
         with Fast5(f) as fh:
             if event_detect:
                 # These parameters make no sense to me, but hey-ho
@@ -94,7 +93,6 @@ def make_basecall_input_multi(fast5_files, section='template', window=[-1, 0, 1]
             else:
                 events = fh.get_read()
             events, _ = segment(events, section=section) 
-            name = fh.filename_short
         try:
             X = events_to_features(events, window=window)
         except TypeError:
@@ -107,7 +105,7 @@ def make_basecall_input_multi(fast5_files, section='template', window=[-1, 0, 1]
         else:
             if len(X) < min_len or len(X) > max_len:
                 continue
-        yield name, X, events
+        yield f, X, events
 
 
 def chunker(array, chunk_size):

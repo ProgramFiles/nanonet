@@ -57,11 +57,13 @@ extensions.append(Extension(
 
 requires=[
     'h5py',
+    'myriad >=0.1.2',
     'numpy',
 ]
 extra_requires = {
     'currennt': ['netCDF4'],
     'watcher': ['watchdog'],
+    'opencl': ['pyopencl']
 }
 
 setup(

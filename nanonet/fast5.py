@@ -11,6 +11,15 @@ import numpy.lib.recfunctions as nprf
 from nanonet.util import docstring_parameter
 
 
+def short_names(fname):
+    filename_short = os.path.splitext(os.path.basename(fname))[0]
+    short_name_match = re.search(re.compile(r'ch\d+_file\d+'), filename_short)
+    name_short = filename_short
+    if short_name_match:
+        name_short = short_name_match.group()
+    return filename_short, name_short
+
+
 class Fast5(h5py.File):
     """Class for grabbing data from single read fast5 files. Many attributes/
     groups are assumed to exist currently (we're concerned mainly with reading).
@@ -68,11 +77,7 @@ class Fast5(h5py.File):
         # Backward compat.
         self.sample_rate = self.sampling_rate
 
-        self.filename_short = os.path.splitext(os.path.basename(self.filename))[0]
-        short_name_match = re.search(re.compile(r'ch\d+_file\d+'), self.filename_short)
-        self.name_short = self.filename_short
-        if short_name_match:
-            self.name_short = short_name_match.group()
+        self.filename_short, self.name_short = short_names(self.filename)
 
     @classmethod
     def New(cls, fname, read='a', tracking_id={}, context_tags={}, channel_id={}):
@@ -931,7 +936,7 @@ class Fast5(h5py.File):
             raise ValueError('Could not retrieve sequence data from {}'.format(location))
 
 
-def iterate_fast5(path, strand_list=None, paths=False, mode='r', limit=None):
+def iterate_fast5(path, strand_list=None, paths=False, mode='r', limit=None, files_group_pattern=None, sort_by_size=None):
     """Iterate over directory or list of .fast5 files.
 
     :param path: Directory in which single read fast5 are located or filename.
@@ -939,6 +944,8 @@ def iterate_fast5(path, strand_list=None, paths=False, mode='r', limit=None):
     :param paths: yield file paths instead of fast5 objects.
     :param mode: mode for opening files.
     :param limit: limit number of files to consider.
+    :param files_group_pattern: yield file paths in groups of specified pattern
+    :param sort_by_size: 'desc' - from largest to smallest, 'asc' - opposite
     """
     if strand_list is None:
         #  Could make glob more specific to filename pattern expected
@@ -953,7 +960,11 @@ def iterate_fast5(path, strand_list=None, paths=False, mode='r', limit=None):
         files = [os.path.join(path, x) for x in names]
     else:
         files = [os.path.join(path, x) for x in strand_list]
-        
+    
+    if sort_by_size is not None:
+        reverse = True if sort_by_size == 'desc' else False 
+        files.sort(reverse=reverse, key=lambda x: os.path.getsize(x))
+    
     for f in files[:limit] :
         if not os.path.exists(f):
             sys.stderr.write('File {} does not exist, skipping\n'.format(f))
