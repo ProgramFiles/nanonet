@@ -1,18 +1,17 @@
 import itertools
 import numpy as np
 import os
-import pyopencl as cl
-
 
 from numpy.ctypeslib import ndpointer
 from ctypes import c_double, c_size_t
 
-from nanonet.nn import dtype, build_program
+from nanonet import cl
+from nanonet.nn import dtype, tiny, build_program
 from nanonet.util import get_shared_lib
 
 nanonetdecode = get_shared_lib('nanonetdecode')
 
-_ETA = np.finfo(dtype).tiny
+_ETA = tiny
 _BASES = ['A', 'C', 'G', 'T']
 _DIBASES = [b1 + b2 for b1 in _BASES for b2 in _BASES]
 _NSTEP = len(_BASES)
@@ -91,6 +90,7 @@ def decode_profile_opencl(ctx, queue_list, post_list, trans_list=None, log=False
     per-transition log-scaled weights. None == no transition weights.
     :param log: Posterior probabilities are in log-space.
     """
+
     fp_type = np.float32 # uses this floating point type in the kernel
     iter = len(queue_list)
     

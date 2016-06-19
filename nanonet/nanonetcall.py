@@ -12,10 +12,9 @@ import subprocess
 import pkg_resources
 import itertools
 import numpy as np
-import pyopencl as cl
 from functools import partial
 
-from nanonet import decoding, nn
+from nanonet import decoding, nn, cl
 from nanonet.fast5 import Fast5, iterate_fast5, short_names
 from nanonet.util import random_string, conf_line, FastaWrite, tang_imap, all_nmers, kmers_to_sequence, kmer_overlap, group_by_list, AddFields
 from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
@@ -29,7 +28,7 @@ now = timeit.default_timer
 
 __fast5_analysis_name__ = 'Basecall_RNN_1D'
 __fast5_section_name__ = 'BaseCalled_{}'
-__ETA__ = 1e-300
+__ETA__ = nn.tiny
 
 
 def get_parser():
@@ -38,7 +37,7 @@ def get_parser():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
 
-    parser.add_argument("input", action=FileExist,
+    parser.add_argument("input", action=FileExist, nargs='?', #--list_platforms means this can be absent
         help="A path to fast5 files.")
     parser.add_argument("--watch", default=None, type=int,
         help="Switch to watching folder, argument value used as timeout period.")
@@ -75,7 +74,7 @@ def get_parser():
         help="Do not use CPU alongside OpenCL, overrides --jobs.")
     parser.add_argument("--list_platforms", action=AutoBool, default=False,
         help="Output list of available OpenCL GPU platforms.")
-    parser.add_argument("--platforms", nargs="+", type=str,
+    parser.add_argument("--platforms", nargs="+", type=str, default=None,
         help="List of OpenCL GPU platforms and devices to be used in a format VENDOR:DEVICE:N_Files space separated, i.e. --platforms nvidia:0:1 amd:0:2 amd:1:2.")
 
     return parser
@@ -87,23 +86,25 @@ class ProcessAttr(object):
         self.device_id = device_id
 
 def list_opencl_platforms():
-    print('\n' + '=' * 60 + '\nOpenCL Platforms and Devices')
-    platforms = [p for p in cl.get_platforms() if p.get_devices(device_type=cl.device_type.GPU)]
+    if cl is None:
+        raise ImportError('pyopencl is not installed, install with pip.')
+    print '\n' + '=' * 60 + '\nOpenCL Platforms and Devices'
+    platforms = (p for p in cl.get_platforms() if p.get_devices(device_type=cl.device_type.GPU))
     for platform in platforms:
-        print('=' * 60)
-        print('Platform - Name:  ' + platform.name)
-        print('Platform - Vendor:  ' + platform.vendor)
-        print('Platform - Version:  ' + platform.version)
-        for device in platform.get_devices(device_type=cl.device_type.GPU):  # Print each device per-platform
-            print('    ' + '-' * 56)
-            print('    Device - Name:  ' + device.name)
-            print('    Device - Type:  ' + cl.device_type.to_string(device.type))
-            print('    Device - Max Clock Speed:  {0} Mhz'.format(device.max_clock_frequency))
-            print('    Device - Compute Units:  {0}'.format(device.max_compute_units))
-            print('    Device - Local Memory:  {0:.0f} KB'.format(device.local_mem_size/1024))
-            print('    Device - Constant Memory:  {0:.0f} KB'.format(device.max_constant_buffer_size/1024))
-            print('    Device - Global Memory: {0:.0f} GB'.format(device.global_mem_size/1073741824.0))
-    print('\n')
+        print '=' * 60
+        print 'Name:     {}'.format(platform.name)
+        print 'Vendor:   {}'.format(platform.vendor)
+        print 'Version:  {}'.format(platform.version)
+        for device in platform.get_devices(device_type=cl.device_type.GPU):
+            print '    ' + '-' * 56
+            print '    Name:  {}'.format(device.name)
+            print '    Type:  {}'.format(cl.device_type.to_string(device.type))
+            print '    Max Clock Speed:  {} Mhz'.format(device.max_clock_frequency)
+            print '    Compute Units:  {}'.format(device.max_compute_units)
+            print '    Local Memory:  {:.0f} KB'.format(device.local_mem_size/1024)
+            print '    Constant Memory:  {:.0f} KB'.format(device.max_constant_buffer_size/1024)
+            print '    Global Memory: {:.0f} GB'.format(device.global_mem_size/1073741824.0)
+    print
 
 
 def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, write_events=True, fast_decode=False, **kwargs):
@@ -314,7 +315,7 @@ def main():
     if len(sys.argv) == 1:
         sys.argv.append("-h")
     args = get_parser().parse_args()
-    
+ 
     if args.list_platforms:
         list_opencl_platforms() 
         sys.exit(0)
@@ -326,7 +327,6 @@ def main():
         except:
             sys.stderr.write("No 'section' found in modelfile, try specifying --section.\n")
             sys.exit(1)
-                 
             
     #TODO: handle case where there are pre-existing files.
     if args.watch is not None:
@@ -345,12 +345,15 @@ def main():
         'event_detect', 'fast_decode',
         'write_events'
     )}
-   
+
+    # Define worker functions   
     workers = []
     if not args.exc_opencl:
         cpu_function = partial(process_read, *fix_args, **fix_kwargs)
         workers.extend([(cpu_function, None)] * args.jobs)
     if args.platforms is not None:
+        if cl is None:
+            raise ImportError('pyopencl is not installed, install with pip.')
         for platform in args.platforms:
             vendor, device_id, n_files = platform.split(':')
             pa = ProcessAttr(use_opencl=True, vendor=vendor, device_id=int(device_id))
@@ -359,11 +362,6 @@ def main():
             workers.append(
                 (opencl_function, int(n_files))
             )
-
-    n_reads = 0
-    n_bases = 0
-    n_events = 0
-    timings = [0.0, 0.0]
 
     # Select how to spread load
     if args.platforms is None:
@@ -380,6 +378,11 @@ def main():
         # Heterogeneous compute
         mapper = JobQueue(fast5_files, workers)
 
+    # Off we go
+    n_reads = 0
+    n_bases = 0
+    n_events = 0
+    timings = [0.0, 0.0]
     t0 = now()
     with FastaWrite(args.output) as fasta:
         for result in mapper:

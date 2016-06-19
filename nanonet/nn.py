@@ -1,15 +1,10 @@
-import pyopencl as cl
 import abc
 import numpy as np
 
-"""Neural network layers and activation functions sufficient to run (but not
-train) a neural network.
-
-..note: we hold a convention that inMat row major (C ordering) as (time, state)
-
-"""
+from nanonet import cl
 
 dtype = np.float32
+tiny = np.finfo(dtype).tiny
 
 def tanh(x):
     return np.tanh(x)

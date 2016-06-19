@@ -57,7 +57,7 @@ extensions.append(Extension(
 
 requires=[
     'h5py',
-    'myriad>=0.1.2',
+    'myriad >=0.1.2',
     'numpy',
 ]
 extra_requires = {
