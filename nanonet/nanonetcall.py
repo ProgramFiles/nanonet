@@ -160,7 +160,6 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, for_2d=False, writ
     if for_2d:
         trans = np.sum(trans, axis=0)
         trans /= np.sum(trans)
-        print trans
         rtn_value.append((post, kmer_path, trans, kmers))
 
     return rtn_value
