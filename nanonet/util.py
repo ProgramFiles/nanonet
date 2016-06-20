@@ -37,8 +37,171 @@ def get_shared_lib(name):
     return library
 
 
+comp = {
+    'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C', 'X': 'X', 'N': 'N',
+    'a': 't', 't': 'a', 'c': 'g', 'g': 'c', 'x': 'x', 'n': 'n',
+    '-': '-'
+}
+
+
+def all_kmers(alphabet='ACGT', length=5, rev_map=False):
+    """ Find all possible kmers of given length.
+
+    .. Warning::
+       The return value type of this function is dependent on the input
+       arguments
+
+    :param alphabet: string from which to draw characters
+    :param length: length of kmers required
+    :param rev_map: return also a dictionary containing the reverse mapping i.e. {'AAA':0, 'AAC':1}
+
+    :returns: a list of strings. kmers are sorted by the ordering of the *alphabet*. If *rev_map*
+        is specified a second item is returned as noted above.
+
+    """
+    fwd_map = map(lambda x: ''.join(x), product(alphabet, repeat=length))
+    if not rev_map:
+        return fwd_map
+    else:
+        return fwd_map, dict(zip(fwd_map, xrange(len(fwd_map))))
+
+
 def all_nmers(n=3, alpha='ACGT'):
-    return [''.join(x) for x in product(alpha, repeat=n)]
+    return all_kmers(length=n, alphabet=alpha)
+
+
+def com(k):
+    """ Return complement of base.
+
+    Performs the subsitutions: A<=>T, C<=>G, X=>X for both upper and lower
+    case. The return value is identical to the argument for all other values.
+    """
+    try:
+        return comp[k]
+    except KeyError:
+        sys.stderr.write("WARNING: No reverse complement for {} found, returning argument.".format(k))
+        return k
+
+
+def rc_kmer(seq):
+    """ Return reverse complement of a string (base) sequence. """
+    return reduce(lambda x,y: x+y, map(com, seq[::-1]))
+
+
+def kmers_to_annotated_sequence(kmers):
+    """ From a sequence of kmers calculate a contiguous symbol string
+    and a list indexing the first kmer in which the symbol was observed.
+
+    *Returns* a tuple containing:
+
+    ================  ======================================================
+    *sequence*        contiguous symbol string
+    *indices*         indices of *kmers* with first occurence of
+                      corresponding symbol in *sequence*
+    ================  ======================================================
+    """
+    overlaps = kmer_overlap(kmers)
+    sequence = kmers_to_call(kmers, overlaps)
+    pos = np.cumsum(overlaps, dtype=int)
+    indices = [-1] * len(sequence)
+    lastpos = -1
+    for i, p in enumerate(pos):
+        if p != lastpos:
+            indices[p] = i
+            lastpos = p
+    return sequence, indices
+
+
+def kmer_overlap(kmers, moves=None, it=False):
+    """From a list of kmers return the character shifts between them.
+    (Movement from i to i+1 entry, e.g. [AATC,ATCG] returns [0,1]).
+
+    :param kmers: sequence of kmer strings.
+    :param moves: allowed movements, if None all movements to length of kmer
+        are allowed.
+    :param it: yield values instead of returning a list.
+
+    Allowed moves may be specified in moves argument in order of preference.
+    """
+
+    if it:
+        return kmer_overlap_gen(kmers, moves)
+    else:
+        return list(kmer_overlap_gen(kmers, moves))
+
+
+def kmer_overlap_gen(kmers, moves=None):
+    """From a list of kmers return the character shifts between them.
+    (Movement from i to i+1 entry, e.g. [AATC,ATCG] returns [0,1]).
+    Allowed moves may be specified in moves argument in order of preference.
+
+    :param moves: allowed movements, if None all movements to length of kmer
+        are allowed.
+    """
+
+    first = True
+    yield 0
+    for last_kmer, this_kmer in window(kmers, 2):
+        if first:
+            if moves is None:
+                l = len(this_kmer)
+                moves = range(l + 1)
+            first = False
+
+        l = len(this_kmer)
+        for j in moves:
+            if j < 0:
+                if last_kmer[:j] == this_kmer[-j:]:
+                    yield j
+                    break
+            elif j > 0 and j < l:
+                if last_kmer[j:l] == this_kmer[0:-j]:
+                    yield j
+                    break
+            elif j == 0:
+                if last_kmer == this_kmer:
+                    yield 0
+                    break
+            else:
+                yield l
+                break
+
+
+def kmers_to_call(kmers, moves):
+    """From a list of kmers and movements, produce a basecall.
+
+    :param kmers: iterable of kmers
+    :param moves: iterbale of character overlaps between kmers
+    """
+
+    # We use izip longest to check that iterables are same length
+    bases = None
+    for kmer, move in izip_longest(kmers, moves, fillvalue=None):
+        if kmer is None or move is None:
+            raise RuntimeError('Lengths of kmers and moves must be equal (kmers={} and moves={}.'.format(len(kmers), len(moves)))
+        if move < 0 and not math.isnan(x):
+            raise RuntimeError('kmers_to_call() cannot perform call when backward moves are present.')
+
+        if bases  is None:
+            bases = kmer
+        else:
+            if math.isnan(move):
+                bases = bases + 'N' + kmer
+            else:
+                bases = bases + kmer[len(kmer) - int(move):len(kmer)]
+    return bases
+
+
+def kmers_to_sequence(kmers):
+    """Convert a sequence of kmers into a contiguous symbol string.
+
+    :param kmers: list of kmers from which to form a sequence
+
+    .. note:
+       This is simply a convenient synthesis of :func:`kmer_overlap`
+       and :func:`kmers_to_call`
+    """
+    return kmers_to_call(kmers, kmer_overlap(kmers))
 
 
 def random_string(length=6):
@@ -276,96 +439,6 @@ def tang_imap(
         pool.join()
 
 
-def kmer_overlap(kmers, moves=None, it=False):
-    """From a list of kmers return the character shifts between them.
-    (Movement from i to i+1 entry, e.g. [AATC,ATCG] returns [0,1]).
-
-    :param kmers: sequence of kmer strings.
-    :param moves: allowed movements, if None all movements to length of kmer
-        are allowed.
-    :param it: yield values instead of returning a list.
-
-    Allowed moves may be specified in moves argument in order of preference.
-    """
-
-    if it:
-        return kmer_overlap_gen(kmers, moves)
-    else:
-        return list(kmer_overlap_gen(kmers, moves))
-
-
-def kmer_overlap_gen(kmers, moves=None):
-    """From a list of kmers return the character shifts between them.
-    (Movement from i to i+1 entry, e.g. [AATC,ATCG] returns [0,1]).
-    Allowed moves may be specified in moves argument in order of preference.
-
-    :param moves: allowed movements, if None all movements to length of kmer
-        are allowed.
-    """
-
-    first = True
-    yield 0
-    for last_kmer, this_kmer in window(kmers, 2):
-        if first:
-            if moves is None:
-                l = len(this_kmer)
-                moves = range(l + 1)
-            first = False
-
-        l = len(this_kmer)
-        for j in moves:
-            if j < 0:
-                if last_kmer[:j] == this_kmer[-j:]:
-                    yield j
-                    break
-            elif j > 0 and j < l:
-                if last_kmer[j:l] == this_kmer[0:-j]:
-                    yield j
-                    break
-            elif j == 0:
-                if last_kmer == this_kmer:
-                    yield 0
-                    break
-            else:
-                yield l
-                break
-
-
-def kmers_to_call(kmers, moves):
-    """From a list of kmers and movements, produce a basecall.
-
-    :param kmers: iterable of kmers
-    :param moves: iterbale of character overlaps between kmers
-    """
-
-    # We use izip longest to check that iterables are same length
-    bases = None
-    for kmer, move in izip_longest(kmers, moves, fillvalue=None):
-        if kmer is None or move is None:
-            raise RuntimeError('Lengths of kmers and moves must be equal (kmers={} and moves={}.'.format(len(kmers), len(moves)))
-        if move < 0 and not math.isnan(x):
-            raise RuntimeError('kmers_to_call() cannot perform call when backward moves are present.')
-
-        if bases  is None:
-            bases = kmer
-        else:
-            if math.isnan(move):
-                bases = bases + 'N' + kmer
-            else:
-                bases = bases + kmer[len(kmer) - int(move):len(kmer)]
-    return bases
-
-
-def kmers_to_sequence(kmers):
-    """Convert a sequence of kmers into a contiguous symbol string.
-
-    :param kmers: list of kmers from which to form a sequence
-
-    .. note:
-       This is simply a convenient synthesis of :func:`kmer_overlap`
-       and :func:`kmers_to_call`
-    """
-    return kmers_to_call(kmers, kmer_overlap(kmers))
 
 
 def fileno(file_or_fd):
