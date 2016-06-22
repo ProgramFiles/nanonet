@@ -79,17 +79,18 @@ def get_parser():
 def process_read_2d(modelfiles, fast5, min_prob=1e-5, trans=None, write_events=True, fast_decode=False, **kwargs):
 
     sections = ('template', 'complement')
-    results = dict()
+    results = {s:None for s in sections}
     for section in sections:
         kwargs['section'] = section
         try:
-            results[section] = process_read_1d(modelfiles[section], fast5,
+            sec_results = process_read_1d(modelfiles[section], fast5,
                 min_prob=min_prob, trans=trans, for_2d=True,
                 write_events=write_events, fast_decode=fast_decode,
                 **kwargs)
         except:
-            results[section] = None
             break
+        else:
+            results[section] = sec_results[0:2]
     if any(v is None for v in results.values()):
         results['2d'] = None
     else:
@@ -100,7 +101,7 @@ def process_read_2d(modelfiles, fast5, min_prob=1e-5, trans=None, write_events=T
         
         try:
             t0 = now()
-            results_2d= call_2d(
+            results_2d = call_2d(
                 posts, kmers, transitions, allkmers, call_band=10, chunk_size=500, use_opencl=False, cpu_id=0)
             time_2d = now() - t0
         except:
@@ -110,9 +111,7 @@ def process_read_2d(modelfiles, fast5, min_prob=1e-5, trans=None, write_events=T
             results['2d'] = sequence, time_2d
             if write_events:
                 write_to_file(fast5, sequence, out_align)
-        for section in sections:
-            results[section] = results[section][0:2]
-   
+
     return results
 
 
