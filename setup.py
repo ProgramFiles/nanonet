@@ -101,21 +101,22 @@ extensions.append(Extension(
     libraries=[boost_python]
 ))
 
-opencl_build = False
+opencl_build = True if 'opencl2d' in sys.argv else False
+opencl_include = os.environ.get('OPENCL_INC')
+opencl_lib = os.environ.get('OPENCL_LIB', os.path.join('/', 'opt','intel', 'opencl'))
 if opencl_build:
-    #TODO: make this work
     extensions.append(Extension(
         'nanonet.caller_2d.viterbi_2d_ocl.viterbi_2d_ocl',
         include_dirs=[opencl_include, os.path.join(caller_2d_path, 'viterbi_2d_ocl'),
-                      os.path.join(caller_2d_path, 'common')] +
+                     os.path.join(caller_2d_path, 'common')] +
                      boost_inc + [numpy.get_include()],
-        sources=[os.path.join(caller_2d_oath, 'viterbi_2d_ocl', x)
+        sources=[os.path.join(caller_2d_path, 'viterbi_2d_ocl', x)
                  for x in ['viterbi_2d_ocl_py.cpp', 'viterbi_2d_ocl.cpp', 'proxyCL.cpp']],
         depends=[os.path.join(caller_2d_path, 'viterbi_2d_ocl', x)
                  for x in ['viterbi_2d_ocl.py.h', 'viterbi_2d_ocl.h', 'proxyCL.h']] +
                 [os.path.join(caller_2d_path, 'common', x)
                  for x in ['bp_tools.h', 'data_view.h', 'utils.h', 'view_numpy_arrays.h']],
-        extra_compile_args=['-Wall', '-std=c++0x'] + OPTIMISATION + MFPMATH,
+        extra_compile_args=['-Wall', '-std=c++0x'] + OPTIMISATION,
         library_dirs=[opencl_lib],
         libraries=['boost_python', 'OpenCL'],
     ))

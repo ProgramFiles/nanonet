@@ -66,6 +66,8 @@ def get_parser():
 
     parser.add_argument("--jobs", default=1, type=int, action=CheckCPU,
         help="No of decoding jobs to run in parallel.")
+    parser.add_argument("--opencl_2d", default=False, action=AutoBool,
+        help="Use OpenCL for 2D calls.")
 
     parser.add_argument("--trans", type=float, nargs=3, default=None,
         metavar=('stay', 'step', 'skip'), help='Base transition probabilities')
@@ -75,7 +77,7 @@ def get_parser():
     return parser
 
 
-def process_read_2d(modelfiles, fast5, min_prob=1e-5, trans=None, write_events=True, fast_decode=False, **kwargs):
+def process_read_2d(modelfiles, fast5, min_prob=1e-5, trans=None, write_events=True, fast_decode=False, opencl_2d=False, **kwargs):
 
     sections = ('template', 'complement')
     results = {s:None for s in sections}
@@ -99,7 +101,7 @@ def process_read_2d(modelfiles, fast5, min_prob=1e-5, trans=None, write_events=T
         try:
             t0 = now()
             results_2d = call_2d(
-                posts, kmers, transitions, allkmers, call_band=10, chunk_size=500, use_opencl=False, cpu_id=0)
+                posts, kmers, transitions, allkmers, call_band=10, chunk_size=500, use_opencl=opencl_2d, cpu_id=0)
             time_2d = now() - t0
         except:
             results['2d'] = None
@@ -153,7 +155,7 @@ def main():
     fix_kwargs = {a: getattr(args, a) for a in ( 
         'min_len', 'max_len', 'section',
         'event_detect', 'fast_decode',
-        'write_events'
+        'write_events', 'opencl_2d'
     )}
 
     # Define worker functions   
