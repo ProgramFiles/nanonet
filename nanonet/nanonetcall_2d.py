@@ -36,6 +36,8 @@ def get_parser():
 
     parser.add_argument("input", action=FileExist, nargs='?', #--list_platforms means this can be absent
         help="A path to fast5 files.")
+    parser.add_argument("output_prefix", type=str, default=None,
+        help="Output prefix, output will be in fasta format.")
 
     parser.add_argument("--watch", default=None, type=int,
         help="Switch to watching folder, argument value used as timeout period.")
@@ -44,8 +46,6 @@ def get_parser():
     parser.add_argument("--event_detect", default=True, action=AutoBool,
         help="Perform event detection, else use existing event data")
 
-    parser.add_argument("--output_prefix", type=str, default=None,
-        help="Output prefix, output will be in fasta format.")
     parser.add_argument("--write_events", action=AutoBool, default=False,
         help="Write event datasets to .fast5.")
     parser.add_argument("--strand_list", default=None, action=FileExist,
@@ -75,7 +75,6 @@ def get_parser():
     return parser
 
 
-
 def process_read_2d(modelfiles, fast5, min_prob=1e-5, trans=None, write_events=True, fast_decode=False, **kwargs):
 
     sections = ('template', 'complement')
@@ -83,14 +82,12 @@ def process_read_2d(modelfiles, fast5, min_prob=1e-5, trans=None, write_events=T
     for section in sections:
         kwargs['section'] = section
         try:
-            sec_results = process_read_1d(modelfiles[section], fast5,
+            results[section] = process_read_1d(modelfiles[section], fast5,
                 min_prob=min_prob, trans=trans, for_2d=True,
                 write_events=write_events, fast_decode=fast_decode,
                 **kwargs)
         except:
             break
-        else:
-            results[section] = sec_results[0:2]
     if any(v is None for v in results.values()):
         results['2d'] = None
     else:
@@ -98,7 +95,7 @@ def process_read_2d(modelfiles, fast5, min_prob=1e-5, trans=None, write_events=T
         kmers = [results[x][2][1] for x in sections]
         transitions = [results[x][2][2].tolist() for x in sections]
         allkmers = [x for x in results[sections[0]][2][3] if 'X' not in x]
-        
+
         try:
             t0 = now()
             results_2d = call_2d(
@@ -112,6 +109,9 @@ def process_read_2d(modelfiles, fast5, min_prob=1e-5, trans=None, write_events=T
             if write_events:
                 write_to_file(fast5, sequence, out_align)
 
+    for section in sections:
+        if results[section] is not None:
+            results[section] = results[section][0:2]       
     return results
 
 
@@ -157,8 +157,11 @@ def main():
     )}
 
     # Define worker functions   
-    worker = partial(process_read_2d, *fix_args, **fix_kwargs)
-    mapper = tang_imap(worker, fast5_files, threads=args.jobs, unordered=True)
+    mapper = tang_imap(
+        process_read_2d, fast5_files,
+        fix_args=fix_args, fix_kwargs=fix_kwargs,
+        threads=args.jobs, unordered=True
+    )
 
     # Off we go
     n_reads = 0
