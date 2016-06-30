@@ -4,14 +4,17 @@
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 
 #include <algorithm>
+#include <cstdint.h>
 #include <boost/python.hpp>
 #include <numpy/ndarrayobject.h>
 #include <data_view.h>
+
 
 namespace bp = boost::python;
 
 
 inline int numpy_type(bool) {return NPY_BOOL;}
+inline int numpy_type(int) {return NPY_INT64;}
 inline int numpy_type(int16_t) {return NPY_INT16;}
 inline int numpy_type(int32_t) {return NPY_INT32;}
 inline int numpy_type(int64_t) {return NPY_INT64;}

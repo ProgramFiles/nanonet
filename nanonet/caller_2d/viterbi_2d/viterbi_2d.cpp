@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <numeric>
 #include <iostream>
+#include <boost/math/special_functions/gamma.hpp>
 #include <boost/numeric/ublas/matrix_proxy.hpp>
 #include <emmintrin.h>
 #include "viterbi_2d.h"
@@ -13,6 +14,7 @@ using ublas::matrix;
 using ublas::matrix_row;
 using ublas::matrix_column;
 
+static const double M_PI = 3.14159265358979323846;
 static const double SQRT_2PI = sqrt(2.0 * M_PI);
 
 
@@ -33,7 +35,7 @@ DefaultEmission::DefaultEmission(const vector<double>& mdlLevels, const vector<d
       noiseScales[i] = square(mdlNoiseSpreads[i]) / abs(mdlNoises[i]);
       noiseShapes[i] = abs(mdlNoises[i]) / noiseScales[i];
       double noiseLogScale = log(noiseScales[i]);
-      double noiseLogGammaShape = lgamma(noiseShapes[i]);
+      double noiseLogGammaShape = boost::math::lgamma(noiseShapes[i]);
       offsets[i] -= noiseShapes[i] * noiseLogScale + noiseLogGammaShape;
       noiseScales[i] = 1.0 / noiseScales[i];
     }

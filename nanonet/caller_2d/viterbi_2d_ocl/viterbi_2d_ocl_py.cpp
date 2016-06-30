@@ -259,8 +259,8 @@ void Viterbi2Docl_Py::makeBands(const Alignment& alignIn, vector<int32_t>& bandS
     int y = (alignIn[p].second == -1) ? lastY : alignIn[p].second;
     for (int k = y - bandSize; k <= y + bandSize; ++k) {
       if (k < 0 || k >= numEvents2) continue;
-      int left = min(x - bandSize, bandStarts[k]);
-      int right = max(x + bandSize, bandEnds[k]);
+      int left = min((int32_t)(x - bandSize), bandStarts[k]);
+      int right = max((int32_t)(x + bandSize), bandEnds[k]);
       left = max(0, left);
       right = min(numEvents1 - 1, right);
       bandStarts[k] = left;
