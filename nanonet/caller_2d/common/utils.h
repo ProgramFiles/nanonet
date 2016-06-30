@@ -2,7 +2,7 @@
 #define UTILS_H
 
 #include <emmintrin.h>
-#include <cstdint>
+#include <cstdint.h>
 #include <iostream>
 #include <cmath>
 #include <vector>
@@ -23,18 +23,14 @@ inline float fastpow2(float p) {
   return v.f;
 }
 
-
-#define v4sfl(x) ((const __m128) {(x), (x), (x), (x)})
-
 /// Fast vectorized approximation for computing 2^p in single precision for 4 numbers.
-inline __m128 vfasterpow2 (const __m128 p) {
-  const __m128 c_126_94269504 = v4sfl(126.94269504f);
-  const __m128 lt125 = _mm_cmplt_ps(p, v4sfl(-125.0f));
-  const __m128 clipp = _mm_or_ps (_mm_andnot_ps(lt125, p), _mm_and_ps(lt125, v4sfl(-125.0f)));
-  union {__m128i i; __m128 f;} v = {_mm_cvttps_epi32(_mm_mul_ps(v4sfl(1 << 23), _mm_add_ps(clipp, c_126_94269504)))};
-  return v.f;
+inline __m128 vfasterpow2(const __m128 p) {
+    const __m128 c_126_94269504 = _mm_set_ps1(126.94269504f);
+    const __m128 lt125 = _mm_cmplt_ps(p, _mm_set_ps1(-125.0f));
+    const __m128 clipp = _mm_or_ps(_mm_andnot_ps(lt125, p), _mm_and_ps(lt125, _mm_set_ps1(-125.0f)));
+    union { __m128i i; __m128 f; } v = { _mm_cvttps_epi32(_mm_mul_ps(_mm_set_ps1(1 << 23), _mm_add_ps(clipp, c_126_94269504))) };
+    return v.f;
 }
-
 
 /** Generic normalization function.
  *  @param NUM_STATES The number of states to normalize over.

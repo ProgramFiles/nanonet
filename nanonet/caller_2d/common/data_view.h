@@ -1,7 +1,7 @@
 #ifndef DATA_VIEW_H
 #define DATA_VIEW_H
 
-#include <cstdint>
+#include <boost/cstdint.hpp>
 #include <vector>
 #include <iterator>
 #include <boost/numeric/ublas/matrix.hpp>

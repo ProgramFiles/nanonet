@@ -1,7 +1,7 @@
 #ifndef PAIR_ALIGN_H
 #define PAIR_ALIGN_H
 
-#include <stdint.h>
+#include <cstdint.h>
 #include <iostream>
 #include <vector>
 #include <boost/numeric/ublas/matrix.hpp>

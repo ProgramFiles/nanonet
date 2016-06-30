@@ -27,39 +27,54 @@ else:
 
 OPTIMISATION = [ '-O3', '-DNDEBUG', '-fstrict-aliasing' ]
 c_compile_args = ['-pedantic', '-Wall', '-std=c99'] + OPTIMISATION
-cxx_compile_args = ['-Wall'] + OPTIMISATION
-cpp_compile_args = cxx_compile_args + ['-std=c++0x']
+cpp_compile_args = ['-std=c++0x'] + OPTIMISATION
 
-boost_inc = []
 boost_python = 'boost_python'
-if platform.system() == 'Darwin':
+
+pkg_path = os.path.join(os.path.dirname(__file__), 'nanonet')
+
+
+system = platform.system()
+print "System is {}".format(system)
+
+main_include = os.path.join(os.path.dirname(__file__), 'nanonet', 'include')
+include_dirs = [main_include]
+boost_inc = []
+boost_lib_path = []
+boost_libs = []
+if system == 'Darwin':
     # Could make this better
+    print "Adding OSX compile/link options"
     boost_inc = ['/opt/local/include/']
-    boost_python = 'boost_python-mt'
+    boost_libs.append('boost_python-mt')
+elif system == 'Windows':
+    print "Adding windows compile/link options"
+    cpp_compile_args += ['/EHsc']
+    include_dirs.append(os.path.join(main_include, 'extras'))
+    boost_lib_path = ['c:\\boost_1_55_0\\lib64-msvc-9.0']
+    boost_inc = ['c:\\boost_1_55_0']
+    # no boost_python
+    cpp_compile_args += ['-DBOOST_PYTHON_STATIC_LIB']
 else:
-    # This is an error (not simply a warning) under clang
-    cxx_compile_args += ['-std=c99']
+    boost_libs.append('boost_python')
+#eventdetect = os.path.join(os.path.dirname(__file__), 'nanonet', 'eventdetection')
+#decode = os.path.join(os.path.dirname(__file__), 'nanonet')
+#maths = os.path.join(os.path.dirname(__file__), 'nanonet', 'fastmath')
+
+
 
 extensions = []
 
-eventdetect = os.path.join(os.path.dirname(__file__), 'nanonet', 'eventdetection')
-decode = os.path.join(os.path.dirname(__file__), 'nanonet')
-maths = os.path.join(os.path.dirname(__file__), 'nanonet', 'fastmath')
-
-include_dirs=[eventdetect, decode, maths]
-if os.name == 'nt':
-    include_dirs.append(os.path.join(eventdetect, 'include'))
-
 extensions.append(Extension(
     'nanonetfilters',
-    sources=[os.path.join(eventdetect, 'filters.c')],
+    sources=[os.path.join(pkg_path, 'eventdetection', 'filters.c')],
     include_dirs=include_dirs,
     extra_compile_args=c_compile_args
 ))
 
 extensions.append(Extension(
     'nanonetdecode',
-    sources=[os.path.join(decode, 'decoding.cpp')],
+    sources=[os.path.join(pkg_path, 'decoding.cpp')],
     include_dirs=include_dirs,
     extra_compile_args=cpp_compile_args
 ))
@@ -69,7 +84,7 @@ extensions.append(Extension(
     'nanonet.caller_2d.viterbi_2d.viterbi_2d',
     include_dirs=[os.path.join(caller_2d_path, 'viterbi_2d')] +
                  [os.path.join(caller_2d_path, 'common')] +
-                 boost_inc + [numpy.get_include()],
+                 [numpy.get_include()] + boost_inc + include_dirs,
     sources=[os.path.join(caller_2d_path, 'viterbi_2d', x)
              for x in ['viterbi_2d_py.cpp', 'viterbi_2d.cpp']],
     depends=[os.path.join(caller_2d_path, x)
@@ -77,28 +92,32 @@ extensions.append(Extension(
             [os.path.join(caller_2d_path, 'common', x)
              for x in ['bp_tools.h', 'data_view.h', 'utils.h', 'view_numpy_arrays.h']],
     extra_compile_args=cpp_compile_args,
-    libraries=[boost_python]
+    library_dirs=boost_lib_path,
+    libraries=boost_libs
 ))
 
 extensions.append(Extension(
     'nanonet.caller_2d.pair_align.pair_align',
-    include_dirs=[os.path.join(caller_2d_path, 'pair_align')] + boost_inc,
+    include_dirs=[os.path.join(caller_2d_path, 'pair_align')] + boost_inc + include_dirs,
     sources=[os.path.join(caller_2d_path, 'pair_align', x)
              for x in ['pair_align_py.cpp', 'nw_align.cpp', 'mm_align.cpp']],
     depends=[os.path.join(caller_2d_path, 'pair_align', x)
              for x in ['pair_align_py.h', 'pair_align.h', 'nw_align.h', 'mm_align.h']],
     extra_compile_args=cpp_compile_args,
-    libraries=[boost_python]
+    library_dirs=boost_lib_path,
+    libraries=boost_libs
 ))
 
 extensions.append(Extension(
     'nanonet.caller_2d.common.stub',
-    include_dirs=[os.path.join(caller_2d_path, 'common')] + boost_inc + [numpy.get_include()],
+    include_dirs=[os.path.join(caller_2d_path, 'common')] +
+                 [numpy.get_include()] + boost_inc + include_dirs,
     sources=[os.path.join(caller_2d_path, 'common', 'stub_py.cpp')],
     depends=[os.path.join(caller_2d_path, 'common', x)
              for x in ['bp_tools.h', 'data_view.h', 'utils.h', 'view_numpy_arrays.h']],
     extra_compile_args=cpp_compile_args,
-    libraries=[boost_python]
+    library_dirs=boost_lib_path,
+    libraries=boost_libs
 ))
 
 opencl_build = False
