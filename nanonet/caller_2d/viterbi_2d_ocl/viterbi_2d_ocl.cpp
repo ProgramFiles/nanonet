@@ -353,11 +353,11 @@ void Viterbi2Docl::processNodes(const std::vector<double>& weights1, const std::
     CHECKERR("cl_emScore2");
 
     cl::Buffer cl_statePointers = cl::Buffer(context, memFlagsOutput,
-        nodes.statePointers.size1() * nodes.statePointers.size2() * sizeof(cl_short), &nodes.statePointers.data()[0], &err);
+        nodes.statePointers.size1() * nodes.statePointers.size2() * sizeof(cl_short), nullptr, &err);
     CHECKERR("cl_statePointers");
 
     cl::Buffer cl_dirPointers = cl::Buffer(context, memFlagsOutput,
-        nodes.dirPointers.size1() * nodes.dirPointers.size2() * sizeof(char), &nodes.dirPointers.data()[0], &err);
+        nodes.dirPointers.size1() * nodes.dirPointers.size2() * sizeof(char), nullptr, &err);
     CHECKERR("cl_dirPointers");
 
     cl::Event ev_enqueue_end, ev_state_pointers_end, ev_dir_pointers_end, ev_viterbi_score_end;
