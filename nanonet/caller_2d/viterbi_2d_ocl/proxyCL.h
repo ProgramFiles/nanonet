@@ -119,12 +119,12 @@ private:
     cl::Device device_;
     cl::Program program_;
     cl::CommandQueue queue_;
-    size_t max_global_mem_size_;// {};
-    size_t max_local_mem_size_;// {};
-    size_t max_work_group_size_;// {};
-    size_t work_group_size_;// {};
-    bool enable_profiling_;// {};
-    vendor active_vendor_;// = other;
+    size_t max_global_mem_size_{};
+    size_t max_local_mem_size_{};
+    size_t max_work_group_size_{};
+    size_t work_group_size_{};
+    bool enable_profiling_{};
+    vendor active_vendor_ = other;
 
 };
 

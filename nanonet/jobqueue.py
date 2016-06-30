@@ -79,8 +79,7 @@ def worker(function, take_n, port, authkey, timeout=__timeout__):
         result.
     """
     sleep(__worker_startup_sleep__) # nasty, allows all workers to come up before iteration begins
-    print port, authkey
-    manager = make_client('', port, authkey)
+    manager = make_client('localhost', port, authkey)
     job_q = manager.get_job_q()
     job_q_closed = manager.q_closed()
     result_q = manager.get_result_q()

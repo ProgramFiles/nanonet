@@ -61,7 +61,7 @@ if system == 'Darwin':
     boost_inc = ['/opt/local/include/']
     boost_libs.append('boost_python-mt')
     if opencl_2d:
-        raise NotImplementedError('OpenCL 2D caller not supported on Mac.')
+        raise NotImplementedError('OpenCL 2D caller not currently supported on Mac.')
 elif system == 'Windows':
     print "Adding windows compile/link options"
     include_dirs.append(os.path.join(main_include, 'extras'))
