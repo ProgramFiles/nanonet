@@ -107,7 +107,7 @@ def list_opencl_platforms():
     print
 
 
-def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, write_events=True, fast_decode=False, **kwargs):
+def process_read(modelfile, fast5, min_prob=1e-5, trans=None, for_2d=False, write_events=True, fast_decode=False, **kwargs):
     """Run neural network over a set of fast5 files
 
     :param modelfile: neural network specification.
@@ -137,8 +137,6 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, w
 
     # Manipulate posterior matrix
     post, good_events = clean_post(post, network.meta['kmers'], min_prob)
-    if post_only:
-        return post
 
     # Decode kmers
     t0 = now()
@@ -158,7 +156,13 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, post_only=False, w
     if write_events:
         write_to_file(fast5, events, kwargs['section'], seq, good_events, kmer_path, kmers, post, states)
 
-    return (fname, seq, score, len(features)), (network_time, decode_time)
+    rtn_value = [(fname, seq, score, len(features)), (network_time, decode_time)]
+    if for_2d:
+        trans = np.sum(trans, axis=0)
+        trans /= np.sum(trans)
+        rtn_value.append((post, kmer_path, trans, kmers))
+
+    return rtn_value
 
 
 def clean_post(post, kmers, min_prob):
