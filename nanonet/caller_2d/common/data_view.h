@@ -1,7 +1,7 @@
 #ifndef DATA_VIEW_H
 #define DATA_VIEW_H
 
-#include <cstdint.h>
+#include <stdint.h>
 #include <vector>
 #include <iterator>
 #include <boost/numeric/ublas/matrix.hpp>

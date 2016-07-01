@@ -2,7 +2,7 @@
 #define UTILS_H
 
 #include <emmintrin.h>
-#include <cstdint.h>
+#include <stdint.h>
 #include <iostream>
 #include <cmath>
 #include <vector>

@@ -3,7 +3,7 @@
 
 #include <vector>
 #include <string>
-#include <cstdint.h>
+#include <stdint.h>
 #include <boost/numeric/ublas/matrix.hpp>
 #include <data_view.h>
 
