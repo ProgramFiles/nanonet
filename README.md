@@ -20,11 +20,12 @@ written in pure python with minimal requirements.
 
 Installation
 ------------
-Nanonet contains implementations of both 1D and 2D basecalling, with OpenCL
+
+*Nanonet contains implementations of both 1D and 2D basecalling, with OpenCL
 versions of each of these. By default, using the instructions in this section
 only the canonical 1D basecalling library will be compiled; OpenCL acceleration
-of 1D basecalling and any 2D basecalling support will be configured. See later
-sections of this documented for setting up these components.
+of 1D basecalling and any 2D basecalling support will not be configured. See later
+sections of this documented for setting up these components.*
 
 The basecalling component of nanonet should install quite trivially using the
 standard python mechanism on most platforms:
