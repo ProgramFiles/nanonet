@@ -150,7 +150,11 @@ i.e. the file available here:
     https://sourceforge.net/projects/boost/files/boost-binaries/1.55.0/boost_1_55_0-msvc-9.0-64.exe/download
     
 The above installer will by default install boost to `c:\local\boost_1_55_0`. If
-you change this path you will also need to edit the `setup.py` file in nanonet.
+you change this path you will also need to edit the `setup.py` file in nanonet. To run
+the 2D basecaller you will need also to add the library location to your `Path` environment
+variable. In Windows Powershell this can be done with:
+
+    $env:Path += ";cL\local\boost_1_55_0\lib64-msvc-9.0"
 
 Once you have installed boost on your OS, the 2D basecalling components can be
 compiled and set up with:
@@ -164,7 +168,7 @@ a basic use would simply require:
     nanonet2d sample_data calls
     
 The second option here specifies a prefix for output fasta files; three files will be
-created, one each for template, complement and 2D basecalls.
+created: one each for template, complement and 2D basecalls.
 
 
 OpenCL Support
