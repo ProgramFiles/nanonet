@@ -216,7 +216,7 @@ The package provides also an interface to currennt for training networks from
 .fast5 files. The type of neural networks implemented by currennt require
 labelled input data. **Nanonet does not provide a method for labelling data**.
 It does however provide a hook to create labelled data. To install currennt
-please refer to the full installation instructions in INSTALLATION.md.
+please refer to the full installation instructions in TRAIN_INSTALL.md.
 
 To run the trainer we specify training data, and validation data. The former
 will be used to train the network whilst the latter is used to check that the
