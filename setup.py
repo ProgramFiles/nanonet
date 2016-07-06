@@ -51,6 +51,7 @@ if opencl_2d:
 
 main_include = os.path.join(os.path.dirname(__file__), 'nanonet', 'include')
 include_dirs = [main_include]
+event_detect_include = []
 boost_inc = []
 boost_lib_path = []
 boost_libs = []
@@ -65,8 +66,9 @@ if system == 'Darwin':
 elif system == 'Windows':
     print "Adding windows compile/link options"
     include_dirs.append(os.path.join(main_include, 'extras'))
+    event_detect_include.append(os.path.join(pkg_path, 'eventdetection'))
     # may wish to edit - required for 2D
-    boost_location = os.path.join('c:', os.sep, 'boost_1_55_0')
+    boost_location = os.path.join('c:', os.sep, 'local', 'boost_1_55_0')
     boost_lib_name = 'lib64-msvc-9.0'
     cpp_compile_args += ['/EHsc']
     boost_lib_path = [os.path.join(boost_location, boost_lib_name)]
@@ -91,7 +93,7 @@ extensions = []
 extensions.append(Extension(
     'nanonetfilters',
     sources=[os.path.join(pkg_path, 'eventdetection', 'filters.c')],
-    include_dirs=include_dirs,
+    include_dirs=include_dirs + event_detect_include,
     extra_compile_args=c_compile_args
 ))
 

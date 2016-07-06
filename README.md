@@ -154,7 +154,7 @@ you change this path you will also need to edit the `setup.py` file in nanonet. 
 the 2D basecaller you will need also to add the library location to your `Path` environment
 variable. In Windows Powershell this can be done with:
 
-    $env:Path += ";cL\local\boost_1_55_0\lib64-msvc-9.0"
+    $env:Path += ";c:\local\boost_1_55_0\lib64-msvc-9.0"
 
 Once you have installed boost on your OS, the 2D basecalling components can be
 compiled and set up with:
