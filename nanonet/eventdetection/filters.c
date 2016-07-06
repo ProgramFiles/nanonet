@@ -6,14 +6,12 @@
 #include <stdio.h>
 #include <assert.h>
 #include <stdint.h>
-
-#define MODULE_API_EXPORTS
-#include "module.h"
-
 #include <float.h>
 #include <math.h>
 
-#include <filters.h>
+#define MODULE_API_EXPORTS
+#include "module.h"
+#include "filters.h"
 
 
 /**
