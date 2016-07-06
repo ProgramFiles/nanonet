@@ -14,6 +14,7 @@ enum vendor
     amd,
     intel,
     nvidia,
+    apple,
     other
 };
 

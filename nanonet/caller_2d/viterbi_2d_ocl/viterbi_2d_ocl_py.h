@@ -184,6 +184,7 @@ BOOST_PYTHON_MODULE(viterbi_2d_ocl) {
     .value("amd",       vendor::amd)
     .value("intel",     vendor::intel)
     .value("nvidia",    vendor::nvidia)
+    .value("apple",     vendor::apple)
     .value("other",     vendor::other)
     ;
 

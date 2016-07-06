@@ -55,14 +55,17 @@ event_detect_include = []
 boost_inc = []
 boost_lib_path = []
 boost_libs = []
+opencl_include = []
+opencl_lib = []
+opencl_extra = []
 
 if system == 'Darwin':
     print "Adding OSX compile/link options"
     # may wish to edit - required for 2D
     boost_inc = ['/opt/local/include/']
     boost_libs.append('boost_python-mt')
-    if opencl_2d:
-        raise NotImplementedError('OpenCL 2D caller not currently supported on Mac.')
+    #if opencl_2d:
+    #    raise NotImplementedError('OpenCL 2D caller not currently supported on Mac.')
 elif system == 'Windows':
     print "Adding windows compile/link options"
     include_dirs.append(os.path.join(main_include, 'extras'))
@@ -74,7 +77,8 @@ elif system == 'Windows':
     boost_lib_path = [os.path.join(boost_location, boost_lib_name)]
     boost_inc = [boost_location]
     if opencl_2d:
-        raise NotImplementedError('OpenCL 2D caller not currently supported on Windows.')
+        opencl_extra.append('-framework OpenCL')
+        #raise NotImplementedError('OpenCL 2D caller not currently supported on Windows.')
     # may wish to edit - required for OpenCL 2D
     #nvidia_opencl = os.path.join('c:', os.sep,
     #    'Program Files', 'NVIDIA GPU Computing Toolkit', 'CUDA', 'v7.5')
@@ -85,8 +89,8 @@ else:
     boost_libs.append('boost_python')
     # may wish to edit - required for OpenCL 2D
     opencl_include = [os.environ.get('OPENCL_INC')]
-    opencl_lib = os.environ.get('OPENCL_LIB', os.path.join(os.sep, 'opt','intel', 'opencl'))
-
+    opencl_lib = [os.environ.get('OPENCL_LIB', os.path.join(os.sep, 'opt','intel', 'opencl'))]
+    opencl_extra.append('-LOpenCL')
 
 extensions = []
 
@@ -160,9 +164,9 @@ if opencl_2d:
                  ('viterbi_2d_ocl.py.h', 'viterbi_2d_ocl.h', 'proxyCL.h')] +
                 [os.path.join(caller_2d_path, 'common', x) for x in 
                  ('bp_tools.h', 'data_view.h', 'utils.h', 'view_numpy_arrays.h')],
-        extra_compile_args=cpp_compile_args,
-        library_dirs=[opencl_lib],
-        libraries=boost_libs + ['OpenCL'],
+        extra_compile_args=cpp_compile_args + opencl_extra,
+        library_dirs=opencl_lib,
+        libraries=boost_libs,
     ))
 
 
