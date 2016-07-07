@@ -56,16 +56,14 @@ boost_inc = []
 boost_lib_path = []
 boost_libs = []
 opencl_include = []
-opencl_lib = []
-opencl_extra = []
+opencl_lib_path = []
+opencl_libs = []
 
 if system == 'Darwin':
     print "Adding OSX compile/link options"
     # may wish to edit - required for 2D
     boost_inc = ['/opt/local/include/']
     boost_libs.append('boost_python-mt')
-    #if opencl_2d:
-    #    raise NotImplementedError('OpenCL 2D caller not currently supported on Mac.')
 elif system == 'Windows':
     print "Adding windows compile/link options"
     include_dirs.append(os.path.join(main_include, 'extras'))
@@ -73,24 +71,23 @@ elif system == 'Windows':
     # may wish to edit - required for 2D
     boost_location = os.path.join('c:', os.sep, 'local', 'boost_1_55_0')
     boost_lib_name = 'lib64-msvc-9.0'
-    cpp_compile_args += ['/EHsc']
+    cpp_compile_args.append('/EHsc')
     boost_lib_path = [os.path.join(boost_location, boost_lib_name)]
     boost_inc = [boost_location]
     if opencl_2d:
-        opencl_extra.append('-framework OpenCL')
-        #raise NotImplementedError('OpenCL 2D caller not currently supported on Windows.')
+        raise NotImplementedError('OpenCL 2D caller not currently supported on Windows.')
     # may wish to edit - required for OpenCL 2D
     #nvidia_opencl = os.path.join('c:', os.sep,
     #    'Program Files', 'NVIDIA GPU Computing Toolkit', 'CUDA', 'v7.5')
     #opencl_include = [os.path.join(main_include, 'extras')] + [os.environ.get('OPENCL_INC'), os.path.join(nvidia_opencl, 'include')]
-    #opencl_lib = [os.environ.get('OPENCL_LIB'), os.path.join(nvidia_opencl, 'lib', 'x64')]
+    #opencl_lib_path = [os.environ.get('OPENCL_LIB'), os.path.join(nvidia_opencl, 'lib', 'x64')]
 else:
     print "Adding Linux(?) compile/link options"
     boost_libs.append('boost_python')
     # may wish to edit - required for OpenCL 2D
     opencl_include = [os.environ.get('OPENCL_INC')]
-    opencl_lib = [os.environ.get('OPENCL_LIB', os.path.join(os.sep, 'opt','intel', 'opencl'))]
-    opencl_extra.append('-LOpenCL')
+    opencl_lib_path = [os.environ.get('OPENCL_LIB', os.path.join(os.sep, 'opt','intel', 'opencl'))]
+    opencl_libs.append('OpenCL')
 
 extensions = []
 
@@ -164,9 +161,9 @@ if opencl_2d:
                  ('viterbi_2d_ocl.py.h', 'viterbi_2d_ocl.h', 'proxyCL.h')] +
                 [os.path.join(caller_2d_path, 'common', x) for x in 
                  ('bp_tools.h', 'data_view.h', 'utils.h', 'view_numpy_arrays.h')],
-        extra_compile_args=cpp_compile_args + opencl_extra,
-        library_dirs=opencl_lib,
-        libraries=boost_libs,
+        extra_compile_args=cpp_compile_args,
+        library_dirs=opencl_lib_path,
+        libraries=boost_libs + opencl_libs 
     ))
 
 
