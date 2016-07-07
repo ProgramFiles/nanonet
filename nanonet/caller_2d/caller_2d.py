@@ -300,15 +300,9 @@ def call_aligned_pair(posts, transitions, alignment, allkmers, call_band=15,
         enable_fp64 = True # whether to offload double floating point calculations to GPU
         ret, error = viterbi.init_cl(src_kernel_dir, bin_kernel_dir, enable_fp64, num_states, work_group_size)
         if not ret or error:
-            #print "Error init_cl (with fp64):"
-            #print "  ", ret
-            #print "  ", error
             enable_fp64 = False
             ret, error = viterbi.init_cl(src_kernel_dir, bin_kernel_dir, enable_fp64, num_states, work_group_size)
             if not ret or error:
-                #print "Error init_cl (without fp64):"
-                #print "  ", ret
-                #print "  ", error
                 return None
 
     alignment_overlap = max(int(1.5 * call_band), 20)
@@ -456,7 +450,6 @@ def call_2d(posts, kmers, transitions, allkmers, call_band=15, chunk_size=500, u
             posts, transitions, alignment, allkmers, call_band=call_band,
             chunk_size=chunk_size, use_opencl=use_opencl, cpu_id=cpu_id)
     except Exception as e:
-        raise e
         raise failed_call
 
     return sequence, out_kmers, out_align 
