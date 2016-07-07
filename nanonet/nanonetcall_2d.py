@@ -103,7 +103,7 @@ def process_read_2d(modelfiles, fast5, min_prob=1e-5, trans=None, write_events=T
             results_2d = call_2d(
                 posts, kmers, transitions, allkmers, call_band=10, chunk_size=500, use_opencl=opencl_2d, cpu_id=0)
             time_2d = now() - t0
-        except:
+        except Exception as e:
             results['2d'] = None
         else:
             sequence, out_kmers, out_align = results_2d

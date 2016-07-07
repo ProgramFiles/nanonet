@@ -93,6 +93,7 @@ std::vector <vendor> proxyCL::available_vendors(std::string &error) const
     const std::string amd_str("Advanced Micro Devices, Inc.");
     const std::string intel_str("Intel(R) Corporation");
     const std::string nvidia_str("NVIDIA Corporation");
+    const std::string apple_str("Apple");
     for (size_t v = 0; v < vendors_str.size(); ++v)
     {
         if (vendors_str[v].compare(amd_str) == 0)
@@ -101,8 +102,11 @@ std::vector <vendor> proxyCL::available_vendors(std::string &error) const
             vendors.push_back(intel);
         else if (vendors_str[v].compare(nvidia_str) == 0)
             vendors.push_back(nvidia);
-        else
+        else if (vendors_str[v].compare(apple_str) == 0) {
+            vendors.push_back(apple);
+        } else {
             vendors.push_back(other);
+        }
     }
 
     return vendors;
@@ -122,6 +126,7 @@ bool proxyCL::select_vendor(const std::string &vendor, std::string &error)
     const std::string amd_str("Advanced Micro Devices, Inc.");
     const std::string intel_str("Intel(R) Corporation");
     const std::string nvidia_str("NVIDIA Corporation");
+    const std::string apple_str("Apple"); 
     for (std::vector<cl::Platform>::iterator i = platforms.begin(); i != platforms.end(); ++i)
     {
         if (!strcmp((*i).getInfo<CL_PLATFORM_VENDOR>(&err).c_str(), vendor.c_str()))
@@ -134,6 +139,8 @@ bool proxyCL::select_vendor(const std::string &vendor, std::string &error)
                 active_vendor_ = intel;
             else if (vendor == nvidia_str)
                 active_vendor_ = nvidia;
+            else if (vendor == apple_str)
+                active_vendor_ = apple;
             else
                 active_vendor_ = other;
 
@@ -155,6 +162,7 @@ bool proxyCL::select_vendor(vendor v, std::string &error)
     const std::string amd_str("Advanced Micro Devices, Inc.");
     const std::string intel_str("Intel(R) Corporation");
     const std::string nvidia_str("NVIDIA Corporation");
+    const std::string apple_str("Apple");
 
     std::string vendor_str;
     switch (v)
@@ -168,11 +176,14 @@ bool proxyCL::select_vendor(vendor v, std::string &error)
     case nvidia:
         vendor_str = nvidia_str;
         break;
+    case apple:
+        vendor_str = apple_str;
+        break;
     default:
         error = "Unknown vendor!";
         return false;
     }
-    
+   
     return select_vendor(vendor_str, error);
 }
 

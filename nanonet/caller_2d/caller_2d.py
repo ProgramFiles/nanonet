@@ -32,6 +32,7 @@ def init_opencl_device(cpu_id=0):
 
     vendors, error = proxy_cl.available_vendors()
     if error or not vendors:
+        print "Error establishes OpenCL vendors"
         return None
 
     # Initially choose the first vendor from the list.
@@ -47,21 +48,23 @@ def init_opencl_device(cpu_id=0):
             active_vendor = opencl_vendor.amd
         elif opencl_vendor.intel in vendors:
             active_vendor = opencl_vendor.intel
-
+        elif opencl_vendor.apple in vendors:
+            active_vendor = opencl_vendor.apple
     ret, error = proxy_cl.select_vendor(active_vendor)
     if not ret or error:
-        return None
-
+         print "Error selecting OpenCL vendor"
+         return None
     opencl_device_type = viterbi_2d_ocl.device_type
 
     devices, error = proxy_cl.available_devices()
     if error or not devices:
+        print "Error establishes OpenCL devices"
         return None
 
     if len(devices) == 1:
         ret, error = proxy_cl.select_device(devices[0].id)
         if ret and not error:
-            # print "Selected OpenCL device:", devices[0].type, devices[0].name # TODO: remove or log to log file.
+            #print "Selected OpenCL device:", devices[0].type, devices[0].name # TODO: remove or log to log file.
             ret, error = proxy_cl.create_context()
             if not ret or error:
                 print "Error creating context for device"
@@ -74,7 +77,7 @@ def init_opencl_device(cpu_id=0):
             device_to_use = cpu_id % len(dev_lst)
             ret, error = proxy_cl.select_device(dev_lst[device_to_use])
             if ret and not error:
-                # print "Selected OpenCL device", cpu_id, device_to_use, devices[device_to_use].type, devices[device_to_use].name
+                #print "Selected OpenCL device", cpu_id, device_to_use, devices[device_to_use].type, devices[device_to_use].name
                 # TODO: remove or log to log file.
                 ret, error = proxy_cl.create_context()
                 if not ret or error:
@@ -86,7 +89,7 @@ def init_opencl_device(cpu_id=0):
         if dev_lst:
             ret, erro = proxy_cl.select_device(dev_lst[0])
             if ret and not error:
-                print "Selected OpenCL device:", devices[0].type, devices[0].name # TODO: remove or log to log file
+                #print "Selected OpenCL device:", devices[0].type, devices[0].name # TODO: remove or log to log file
                 ret, error = proxy_cl.create_context()
                 if not ret or error:
                     print "Error creating context for device."
@@ -94,7 +97,7 @@ def init_opencl_device(cpu_id=0):
                 return proxy_cl
         ret, error = proxy_cl.select_device(devices[0].id)
         if ret and not error:
-            print "Selected OpenCL device:", devices[0].type, devices[0].name # TODO: remove or log to log file
+            #print "Selected OpenCL device:", devices[0].type, devices[0].name # TODO: remove or log to log file
             ret, error = proxy_cl.create_context()
             if not ret or error:
                 print "Error creating context for device."
@@ -252,14 +255,13 @@ def call_aligned_pair(posts, transitions, alignment, allkmers, call_band=15,
     :rtype: tuple or None
 
     """
-    
     # Init opencl
     proxy_cl = None
     if use_opencl:
         proxy_cl = init_opencl_device(cpu_id)
         if not proxy_cl:
             return None
-    
+ 
     # Prepare models and transitions for the viterbi_2d code.
     trans = transitions[0] + transitions[1]
     num_states = len(allkmers)
@@ -287,7 +289,6 @@ def call_aligned_pair(posts, transitions, alignment, allkmers, call_band=15,
         viterbi = viterbi_2d_ocl.Viterbi2Docl(proxy_cl)
         viterbi.init_data(state_info, params)
         # Initialize opencl kernel specifics
-        enable_fp64 = True # whether to offload double floating point calculations to GPU
         work_group_size = 0 # when set to 0 max device available will be used
         src_kernel_dir = os.path.dirname(viterbi_2d_ocl.__file__)
         bin_kernel_dir = os.path.join(os.path.expanduser('~'), '.nanonet_opencl')
@@ -295,10 +296,14 @@ def call_aligned_pair(posts, transitions, alignment, allkmers, call_band=15,
             os.makedirs(bin_kernel_dir)
         except:
             pass
+
+        enable_fp64 = True # whether to offload double floating point calculations to GPU
         ret, error = viterbi.init_cl(src_kernel_dir, bin_kernel_dir, enable_fp64, num_states, work_group_size)
         if not ret or error:
-            print error
-            return None
+            enable_fp64 = False
+            ret, error = viterbi.init_cl(src_kernel_dir, bin_kernel_dir, enable_fp64, num_states, work_group_size)
+            if not ret or error:
+                return None
 
     alignment_overlap = max(int(1.5 * call_band), 20)
     data_overlap = max(call_band, 10)
