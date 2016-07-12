@@ -148,9 +148,7 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, for_2d=False, writ
     decode_time = now() - t0
 
     # Form basecall
-    kmers = network.meta['kmers']
-    kmer_path = [kmers[i] for i in states]
-    seq = kmers_to_sequence(kmer_path)
+    seq, qual = form_basecalls(post, [x for x in network.meta['kmers'] if 'X' not in x], states)
 
     # Write events table
     if write_events:
@@ -181,6 +179,44 @@ def clean_post(post, kmers, min_prob):
     post /= weights 
     post = min_prob + (1.0 - min_prob) * post
     return post, good_events
+
+
+def form_basecalls(post, kmers, states):
+    mid = int(len(kmers[0])) / 2
+    bases = set(''.join(kmers))
+    n_events = len(post)
+
+    kmer_path = [kmers[i] for i in states]
+    seq = kmers_to_sequence(kmer_path)
+    moves = np.array(kmer_overlap(kmer_path))
+
+    base_scores = dict()
+    for base in bases:
+        base_slice = np.where(np.array([kmer[mid] for kmer in kmers]) == base)[0]
+        base_scores[base] = np.ravel(post[:, base_slice].sum(axis=1))
+
+    called_probs = [max([base_scores[b][x] for b in bases]) for x in range(min(mid, n_events))]
+    for i in xrange(1, n_events):
+        m = moves[i]
+        if m == 0:
+            called_probs[-1] = min(called_probs[-1], base_scores[base][i])
+        else:
+            for j in range(m):
+                if j > mid:
+                    called_probs.append(called_probs[-1])
+                else:
+                    base = kmer_path[i][mid-j]
+                    called_probs.append(base_scores[base][i-j])
+    called_probs.extend((
+        max([base_scores[b][x] for b in bases])
+        for x in range(max(0, n_events - (len(kmers[0]) - mid)), n_events)
+    ))
+    called_probs = np.clip(called_probs, 0.0, 1.0)
+    scores = np.log1p(-called_probs) / np.log(10)
+    scores = np.clip(-10 * scores.astype(int) + 33, 33, 126)
+    qstring = ''.join((chr(x) for x in scores))
+
+    return seq, qstring
 
 
 def write_to_file(fast5, events, section, seq, good_events, kmer_path, kmers, post, states):
