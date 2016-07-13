@@ -150,7 +150,9 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, for_2d=False, writ
     decode_time = now() - t0
 
     # Form basecall
-    seq, qual, kmer_path = form_basecall(post, [x for x in network.meta['kmers'] if 'X' not in x], states)
+    kmers = [x for x in network.meta['kmers'] if 'X' not in x]
+    qdata = get_qdata(post, kmers)
+    seq, qual, kmer_path = form_basecall(qdata, kmers, states, qscore_correction=kwargs['section'])
 
     # Write events table
     if write_events:
@@ -183,18 +185,26 @@ def clean_post(post, kmers, min_prob):
     return post, good_events
 
 
-def form_basecall(post, kmers, states, qscore_correction=True):
+def get_qdata(post, kmers):
     bases = sorted(set(''.join(kmers)))
     kmer_len = len(kmers[0])
     n_events = len(post)
     n_bases = len(bases)
-    kmer_path = [kmers[i] for i in states]
 
     qdata = np.empty((n_events, len(bases)*kmer_len), dtype=post.dtype)
     for i, (pos, base) in enumerate(itertools.product(range(kmer_len), bases)):
         cols = np.fromiter((k[pos] == base for k in kmers),
             dtype=bool, count=len(kmers))
         qdata[:, i] = np.sum(post[:, cols], axis=1)
+    return qdata
+
+
+def form_basecall(qdata, kmers, states, qscore_correction=None):
+    bases = sorted(set(''.join(kmers)))
+    kmer_len = len(kmers[0])
+    n_events = len(qdata)
+    n_bases = len(bases)
+    kmer_path = [kmers[i] for i in states]
 
     moves = kmer_overlap(kmer_path)
     seq_len = np.sum(moves) + kmer_len
@@ -222,20 +232,24 @@ def form_basecall(post, kmers, states, qscore_correction=True):
         dtype=float, count=len(sequence)
     )
 
-    # correction - initial scores fit to empirically observered
-    #   error probabilities per score. The uncalibrated scores
-    qscore_correction
-    if qscore_correction:
+    if qscore_correction == 'template':
         # initial scores fit to empirically observed probabilities
         #   per score using: Perror = a.10^(-bQ/10). There's a change
         #   in behaviour at Q10 so we fit two lines. (Q10 seems suspicious).
         switch_q = 10
-        a, b = 0.0552436, 0.702679
+        a, b = 0.05524, 0.70268
         c, d = 0.20938, 1.00776
         switch_p = 1.0 - np.power(10.0, - 0.1 * switch_q)
         scores = np.empty_like(called_probs)
         for x, y, indices in zip((a,c), (b,d), (called_probs < switch_p, called_probs >= switch_p)):
             scores[indices] = -(10.0 / np.log(10.0)) * (y*np.log1p(-called_probs[indices]) + np.log(x))
+    elif qscore_correction in ('2d','complement'):
+        # same fitting as above
+        if qscore_correction == 'complement':
+            x, y = 0.13120, 0.88952
+        else:
+            x, y = 0.02657, 0.65590 
+        scores = -(10.0 / np.log(10.0)) * (y*np.log1p(-called_probs) + np.log(x))
     else:
         scores = -10.0 * np.log1p(-called_probs) / np.log(10.0)
 

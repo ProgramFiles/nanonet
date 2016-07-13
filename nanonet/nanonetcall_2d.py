@@ -15,9 +15,10 @@ import numpy as np
 from functools import partial
 
 from nanonet.fast5 import Fast5, iterate_fast5, short_names
-from nanonet.util import FastaWrite, tang_imap 
+from nanonet.util import FastaWrite, tang_imap, rc_kmer 
 from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
 from nanonet.nanonetcall import process_read as process_read_1d
+from nanonet.nanonetcall import form_basecall
 from nanonet.caller_2d.caller_2d import call_2d
 
 import warnings
@@ -38,6 +39,8 @@ def get_parser():
         help="A path to fast5 files.")
     parser.add_argument("output_prefix", type=str, default=None,
         help="Output prefix, output will be in fasta format.")
+    parser.add_argument("--fastq", action=AutoBool, default=False,
+        help="Output fastq rather than fasta.")
 
     parser.add_argument("--watch", default=None, type=int,
         help="Switch to watching folder, argument value used as timeout period.")
@@ -88,7 +91,7 @@ def process_read_2d(modelfiles, fast5, min_prob=1e-5, trans=None, write_events=T
                 min_prob=min_prob, trans=trans, for_2d=True,
                 write_events=write_events, fast_decode=fast_decode,
                 **kwargs)
-        except:
+        except Exception as e:
             break
     if any(v is None for v in results.values()):
         results['2d'] = None
@@ -106,10 +109,11 @@ def process_read_2d(modelfiles, fast5, min_prob=1e-5, trans=None, write_events=T
         except Exception as e:
             results['2d'] = None
         else:
-            sequence, out_kmers, out_align = results_2d
-            results['2d'] = sequence, time_2d
+            sequence, qstring, out_kmers, out_align = results_2d
+
+            results['2d'] = (sequence, qstring), time_2d
             if write_events:
-                write_to_file(fast5, sequence, out_align)
+                write_to_file(fast5, sequence, qual, out_align)
 
     for section in sections:
         if results[section] is not None:
@@ -117,7 +121,7 @@ def process_read_2d(modelfiles, fast5, min_prob=1e-5, trans=None, write_events=T
     return results
 
 
-def write_to_file(fast5, seq, alignment):
+def write_to_file(fast5, seq, qual, alignment):
     with Fast5(fast5, 'a') as fh:
        base = fh.get_analysis_new(__fast5_analysis_name__)
        fh[fh._join_path(base, 'Alignment')] = alignment
@@ -126,7 +130,7 @@ def write_to_file(fast5, seq, alignment):
        except:
            name = fh.filename_short
        fh._add_string_dataset(
-           '@{}\n{}\n+\n{}\n'.format(name, seq, '!'*len(seq)),
+           '@{}\n{}\n+\n{}\n'.format(name, seq, qual),
            fh._join(path(base, 'Fastq')))
 
 
@@ -174,18 +178,22 @@ def main():
     t0 = now()
     sections = ('template', 'complement', '2d')
     if args.output_prefix is not None:
-        filenames = ['{}_{}.fasta'.format(args.output_prefix, x) for x in sections]
+        ext = 'fastq' if args.fastq else 'fasta'
+        filenames = ['{}_{}.{}'.format(args.output_prefix, x, ext) for x in sections]
     else:
         filenames = ['-'] * 3
 
-    with FastaWrite(filenames[0]) as fasta_temp, FastaWrite(filenames[1]) as fasta_comp, FastaWrite(filenames[2]) as fasta_2d:
+    with FastaWrite(filenames[0], args.fastq) as fasta_temp, FastaWrite(filenames[1], args.fastq) as fasta_comp, FastaWrite(filenames[2], args.fastq) as fasta_2d:
         for result in mapper:
             if result['template'] is None:
                 continue
             data, time = result['template']
             fname, basecall, _, n_ev = data
-            name, _ = short_names(fname) 
-            fasta_temp.write(*(name, basecall))
+            name, _ = short_names(fname)
+            if args.fastq:
+                fasta_temp.write(name, *basecall)
+            else:
+                fasta_temp.write(name, basecall[0])
             n_reads += 1
             n_bases += len(basecall)
             n_events += n_ev
@@ -195,12 +203,18 @@ def main():
                 continue
             data, time = result['complement']
             _, basecall, _, _ = data
-            fasta_comp.write(*(name, basecall))
+            if args.fastq:
+                fasta_comp.write(name, *basecall)
+            else:
+                fasta_comp.write(name, basecall[0])
 
             if result['2d'] is None:
                 continue
             basecall, time_2d = result['2d']         
-            fasta_2d.write(*(name, basecall))
+            if args.fastq:
+                fasta_2d.write(name, *basecall)
+            else:
+                fasta_2d.write(name, basecall[0])
             n_bases_2d += len(basecall)
             timings[2] += time_2d
     t1 = now()
