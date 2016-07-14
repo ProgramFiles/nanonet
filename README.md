@@ -203,6 +203,11 @@ experiment with this option and the `--jobs` option to achieve optimal throughpu
 
 **2D Acceleration**
 
+To enable OpenCL acceration on 2D basecalling it is necessary to compile additional
+components during the setup of nanonet by using the `opencl2d` argument:
+
+    python setup.py install opencl2d
+
 With a working OpenCL runtime and development environment 2D basecalling can be accelerated
 by simply adding and option on the commandline:
 
