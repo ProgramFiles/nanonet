@@ -24,14 +24,7 @@ try:
 except ImportError:
     viterbi_2d_ocl = None
 
-def memodict(f):
-    class memodict(dict):
-        def __missing__(self, key):
-            ret = self[key] = f(key)
-            return ret
-    return memodict().__getitem__
 
-@memodict
 def init_opencl_device(cpu_id=0):
     if viterbi_2d_ocl is None:
         return None
