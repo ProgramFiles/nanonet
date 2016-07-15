@@ -14,6 +14,8 @@ import itertools
 import numpy as np
 from functools import partial
 
+from multiprocessing.pool import ThreadPool as Pool
+
 from nanonet.fast5 import Fast5, iterate_fast5, short_names
 from nanonet.util import FastaWrite, tang_imap 
 from nanonet.cmdargs import FileExist, CheckCPU, AutoBool
@@ -77,19 +79,38 @@ def get_parser():
     return parser
 
 
-def process_read_2d(modelfiles, fast5, min_prob=1e-5, trans=None, write_events=True, fast_decode=False, opencl_2d=False, **kwargs):
-
+def process_read_sections(fast5, modelfiles, jobs=2, **kwargs):
+    # Placeholder function for processing two 1D parts of a read.
+    #    TODO: improve scheduling of template, complement and 2D. Here we
+    #          simply use a thread pool to give a small benefit (python code
+    #          still subject to GIL)
     sections = ('template', 'complement')
-    results = {s:None for s in sections}
-    for section in sections:
-        kwargs['section'] = section
+    results = []
+    worker = partial(process_read_1d, **kwargs)
+    pool = Pool(jobs)
+    async = (pool.apply_async(worker, args=(modelfiles[s], fast5), kwds={'section':s}) for s in sections)
+    for res in async:
         try:
-            results[section] = process_read_1d(modelfiles[section], fast5,
-                min_prob=min_prob, trans=trans, for_2d=True,
-                write_events=write_events, fast_decode=fast_decode,
-                **kwargs)
+            results.append(res.get())
         except:
-            break
+            results.append(None)
+    pool.close()
+    pool.join()
+    return {s:r for s, r in zip(sections, results)}
+
+
+def process_read_2d(modelfiles, fast5, min_prob=1e-5, trans=None, write_events=True, fast_decode=False, opencl_2d=False, **kwargs):
+    """Perform 2D call for a single read. We process the two 1D reads in
+    parallel. For CPU only use this may conflict with --jobs option of program.
+
+    """
+    sections = ('template', 'complement')
+    kwargs.update({
+       'min_prob':min_prob, 'trans':trans, 'for_2d':True,
+       'write_events':write_events, 'fast_decode':fast_decode,
+    })
+    #TODO: see comments in the below function
+    results = process_read_sections(fast5, modelfiles, jobs=2, **kwargs)
     if any(v is None for v in results.values()):
         results['2d'] = None
     else:
