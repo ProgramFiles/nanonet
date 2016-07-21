@@ -48,6 +48,8 @@ def get_parser():
 
     parser.add_argument("--output", type=str,
         help="Output name, output will be in fasta format.")
+    parser.add_argument("--fastq", action=AutoBool, default=False,
+        help="Output fastq rather than fasta.")
     parser.add_argument("--write_events", action=AutoBool, default=False,
         help="Write event datasets to .fast5.")
     parser.add_argument("--strand_list", default=None, action=FileExist,
@@ -148,15 +150,15 @@ def process_read(modelfile, fast5, min_prob=1e-5, trans=None, for_2d=False, writ
     decode_time = now() - t0
 
     # Form basecall
-    kmers = network.meta['kmers']
-    kmer_path = [kmers[i] for i in states]
-    seq = kmers_to_sequence(kmer_path)
+    kmers = [x for x in network.meta['kmers'] if 'X' not in x]
+    qdata = get_qdata(post, kmers)
+    seq, qual, kmer_path = form_basecall(qdata, kmers, states, qscore_correction=kwargs['section'])
 
     # Write events table
     if write_events:
-        write_to_file(fast5, events, kwargs['section'], seq, good_events, kmer_path, kmers, post, states)
+        write_to_file(fast5, events, kwargs['section'], seq, qual, good_events, kmer_path, kmers, post, states)
 
-    rtn_value = [(fname, seq, score, len(features)), (network_time, decode_time)]
+    rtn_value = [(fname, (seq, qual), score, len(features)), (network_time, decode_time)]
     if for_2d:
         trans = np.sum(trans, axis=0)
         trans /= np.sum(trans)
@@ -183,7 +185,89 @@ def clean_post(post, kmers, min_prob):
     return post, good_events
 
 
-def write_to_file(fast5, events, section, seq, good_events, kmer_path, kmers, post, states):
+def get_qdata(post, kmers):
+    bases = sorted(set(''.join(kmers)))
+    kmer_len = len(kmers[0])
+    n_events = len(post)
+    n_bases = len(bases)
+
+    qdata = np.empty((n_events, len(bases)*kmer_len), dtype=post.dtype)
+    for i, (pos, base) in enumerate(itertools.product(range(kmer_len), bases)):
+        cols = np.fromiter((k[pos] == base for k in kmers),
+            dtype=bool, count=len(kmers))
+        qdata[:, i] = np.sum(post[:, cols], axis=1)
+    return qdata
+
+
+def form_basecall(qdata, kmers, states, qscore_correction=None):
+    bases = sorted(set(''.join(kmers)))
+    kmer_len = len(kmers[0])
+    n_events = len(qdata)
+    n_bases = len(bases)
+    kmer_path = [kmers[i] for i in states]
+
+    moves = kmer_overlap(kmer_path)
+    seq_len = np.sum(moves) + kmer_len
+    scores = np.zeros((seq_len, len(bases)), dtype=np.float32)
+    sequence = list(kmer_path[0])
+    posmap = range(kmer_len)
+
+    _contribute(scores, qdata[0, :], posmap, n_bases)
+    for event, move in enumerate(moves):
+        if move > 0:
+            if move == kmer_len:
+                posmap = range(posmap[-1] + 1, posmap[-1] + 1 + kmer_len)
+            else:
+                posmap[:-move] = posmap[move:]
+                posmap[-move:] = range(posmap[-move-1] + 1, posmap[-move-1] + 1 + move)
+            sequence.append(kmer_path[event][-move:])
+        _contribute(scores, qdata[event, :], posmap, n_bases)
+    sequence = ''.join(sequence)
+    base_to_pos = {b:i for i,b in enumerate(bases)}
+    scores += __ETA__
+    scoresums = np.sum(scores, axis=1)
+    scores /= scoresums[:, None]
+    called_probs = np.fromiter(
+        (scores[n, base_to_pos[base]] for n, base in enumerate(sequence)),
+        dtype=float, count=len(sequence)
+    )
+
+    if qscore_correction == 'template':
+        # initial scores fit to empirically observed probabilities
+        #   per score using: Perror = a.10^(-bQ/10). There's a change
+        #   in behaviour at Q10 so we fit two lines. (Q10 seems suspicious).
+        switch_q = 10
+        a, b = 0.05524, 0.70268
+        c, d = 0.20938, 1.00776
+        switch_p = 1.0 - np.power(10.0, - 0.1 * switch_q)
+        scores = np.empty_like(called_probs)
+        for x, y, indices in zip((a,c), (b,d), (called_probs < switch_p, called_probs >= switch_p)):
+            scores[indices] = -(10.0 / np.log(10.0)) * (y*np.log1p(-called_probs[indices]) + np.log(x))
+    elif qscore_correction in ('2d','complement'):
+        # same fitting as above
+        if qscore_correction == 'complement':
+            x, y = 0.13120, 0.88952
+        else:
+            x, y = 0.02657, 0.65590 
+        scores = -(10.0 / np.log(10.0)) * (y*np.log1p(-called_probs) + np.log(x))
+    else:
+        scores = -10.0 * np.log1p(-called_probs) / np.log(10.0)
+
+    offset = 33
+    scores = np.clip(np.rint(scores, scores).astype(int) + offset, offset, 126)
+    qstring = ''.join(chr(x) for x in scores)
+    return sequence, qstring, kmer_path
+
+
+def _contribute(scores, qdata, posmap, n_bases):
+     kmerlen = len(posmap)
+     for kmer_pos, seq_pos in enumerate(posmap):
+         index = (kmerlen - kmer_pos - 1) * n_bases
+         scores[seq_pos, :] += qdata[index:index + n_bases]
+     return
+
+
+def write_to_file(fast5, events, section, seq, qual, good_events, kmer_path, kmers, post, states):
     adder = AddFields(events[good_events])
     adder.add('model_state', kmer_path,
         dtype='>S{}'.format(len(kmers[0])))
@@ -215,7 +299,7 @@ def write_to_file(fast5, events, section, seq, good_events, kmer_path, kmers, po
        except:
            name = fh.filename_short
        fh._add_string_dataset(
-           '@{}\n{}\n+\n{}\n'.format(name, seq, '!'*len(seq)),
+           '@{}\n{}\n+\n{}\n'.format(name, seq, qual),
            fh._join_path(base, 'Fastq'))
 
         
@@ -287,26 +371,27 @@ def process_read_opencl(modelfile, pa, fast5_list, min_prob=1e-5, trans=None, wr
             
     # Form basecall
     kmers = network.meta['kmers']
-    kmer_path_list = []
     seq_list = []
-    for states in states_list:
-        kmer_path = [kmers[i] for i in states]
-        seq = kmers_to_sequence(kmer_path)
-        kmer_path_list.append(kmer_path)
+    qual_list = []
+    kmer_path_list = []
+    for states, post in zip(states_list, post_list):
+        seq, qual, kmer_path = form_basecall(post, [x for x in network.meta['kmers'] if 'X' not in x], states)
         seq_list.append(seq)
+        kmer_path_list.append(kmer_path)
+        qual_list.append(qual)
 
     # Write events table
     if write_events:
         section_list = (kwargs['section'] for _ in xrange(n_files))
         kmers_list = (network.meta['kmers'] for _ in xrange(n_files))
         for data in zip(
-            file_list, events_list, section_list, seq_list,
+            file_list, events_list, section_list, seq_list, qual_list,
             good_events_list, kmer_path_list, kmers_list, post_list, states_list
             ):
             write_to_file(*data)
 
     # Construst a sequences of objects as process_read returns
-    data = zip(file_list, seq_list, score_list, (len(x) for x in features_list))
+    data = zip(file_list, zip(seq_list, qual_list), score_list, (len(x) for x in features_list))
     timings = zip(network_time_list, decode_time_list)
     ret = zip(data, timings)
     if n_files < len(fast5_list):
@@ -388,14 +473,18 @@ def main():
     n_events = 0
     timings = [0.0, 0.0]
     t0 = now()
-    with FastaWrite(args.output) as fasta:
+    with FastaWrite(args.output, args.fastq) as fasta:
         for result in mapper:
             if result is None:
                 continue
             data, time = result
-            fname, basecall, _, n_ev = data
-            name, _ = short_names(fname) 
-            fasta.write(*(name, basecall))
+            fname, call_data, _, n_ev = data
+            name, _ = short_names(fname)
+            basecall, quality = call_data
+            if args.fastq:
+                fasta.write(name, basecall, quality)
+            else:
+                fasta.write(name, basecall)
             n_reads += 1
             n_bases += len(basecall)
             n_events += n_ev
