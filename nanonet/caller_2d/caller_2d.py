@@ -18,6 +18,7 @@ from math import ceil, floor
 from nanonet.caller_2d.viterbi_2d import viterbi_2d
 from nanonet.util import all_kmers, rc_kmer, kmers_to_sequence, kmer_overlap
 from nanonet.caller_2d.align_kmers import align_basecalls
+from nanonet.nanonetcall import get_qdata, form_basecall
 
 try:
     from nanonet.caller_2d.viterbi_2d_ocl import viterbi_2d_ocl
@@ -335,7 +336,6 @@ def call_aligned_pair(posts, transitions, alignment, allkmers, call_band=15,
         com_chunk_start = chunker.chunk_complement_starts[chunk]
         com_chunk_end = chunker.chunk_complement_ends[chunk] + 1
 
-        # TODO: change this to slice of posterior
         post1 = posts[0][tmp_chunk_start+temp_start:tmp_chunk_end+temp_start, :].copy()
         post2 = posts[1][com_chunk_start+comp_start:com_chunk_end+comp_start, :]
         post2 = post2[::-1, rc_order].copy()
@@ -362,6 +362,8 @@ def call_aligned_pair(posts, transitions, alignment, allkmers, call_band=15,
         sequence = kmers_to_sequence(chunk_kmers)
         if len(sequence) < len(align_in) / 3:
             return None
+
+        merged_qdata = make_aligned_qdata(post1, post2, chunk_align_out, allkmers)
         
         for i, item in enumerate(chunk_align_out):
             x0 = item[0]
@@ -400,14 +402,20 @@ def call_aligned_pair(posts, transitions, alignment, allkmers, call_band=15,
                 chunk_align_out[i] = (chunk_align_out[i][0] + tmp_chunk_start, chunk_align_out[i][1] + com_chunk_start)
 
         # Accumulate results from chunk.
+        qdata.append(merged_qdata[:pos,:])
         new_alignment[cum_pos:cum_pos+pos] = chunk_align_out[:pos]
         kmers.extend(chunk_kmers[:pos])
         cum_pos += pos
 
-    out_kmers = kmers[0:cum_pos]
-    out_sequence = kmers_to_sequence(out_kmers) 
     out_align = new_alignment[0:cum_pos]
     check_alignment(temp_end - temp_start + 1, comp_end - comp_start + 1, out_align)
+    # finalised qscore data and form basecall
+    qdata = merge_qdata(qdata)
+    kmer_map = {k:i for i,k in enumerate(allkmers)}
+    states = [kmer_map[k] for k in kmers[0:cum_pos]]
+    out_sequence, out_qstring, out_kmers = form_basecall(
+        qdata, allkmers, states, qscore_correction='2d'
+    ) 
 
     # Adjust alignment so indexes refer to full non-trimmed data sets.
     for i, align in enumerate(out_align):
@@ -416,7 +424,42 @@ def call_aligned_pair(posts, transitions, alignment, allkmers, call_band=15,
         if align['pos1'] != -1:
             out_align[i]['pos1'] += comp_start
             
-    return out_sequence, out_kmers, out_align
+    return out_sequence, out_qstring, out_kmers, out_align
+
+
+def make_aligned_qdata(post1, post2, alignment, kmers):
+    post = np.empty((len(alignment), post1.shape[1]), dtype=post1.dtype)
+    for pos in range(len(alignment)):
+        pos0 = alignment[pos][0]
+        pos1 = alignment[pos][1]
+        temp = None
+        comp = None
+        if pos0 != -1:
+            temp = post1[pos0,:]
+        if pos1 != -1:
+            comp = post2[pos1,:]
+        if temp is None:
+            post[pos,:] = comp
+        elif comp is None:
+            post[pos,:] = temp
+        else:
+            prod = temp * comp
+            nrm = 1.0 / np.sum(prod)
+            post[pos,:] = prod * nrm
+    qdata = get_qdata(post, kmers)
+    return qdata
+
+
+def merge_qdata(qdata_list):
+    n = 0
+    for block in qdata_list:
+        n += block.shape[0]
+    qdata = np.empty((n, block.shape[1]), dtype=block[0].dtype)
+    p = 0
+    for block in qdata_list:
+        qdata[p:p+block.shape[0],:] = block
+        p += block.shape[0]
+    return qdata
 
 
 def call_2d(posts, kmers, transitions, allkmers, call_band=15, chunk_size=500, use_opencl=False, cpu_id=0):
@@ -446,12 +489,12 @@ def call_2d(posts, kmers, transitions, allkmers, call_band=15, chunk_size=500, u
             raise failed_alignment
 
     try:
-        sequence, out_kmers, out_align = call_aligned_pair(
+        sequence, out_kmers, out_align, trimmed_align = call_aligned_pair(
             posts, transitions, alignment, allkmers, call_band=call_band,
             chunk_size=chunk_size, use_opencl=use_opencl, cpu_id=cpu_id)
     except Exception as e:
         raise failed_call
 
-    return sequence, out_kmers, out_align 
+    return sequence, out_kmers, out_align, trimmed_align
 
 

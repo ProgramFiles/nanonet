@@ -282,7 +282,7 @@ def docstring_parameter(*sub):
 
 
 class FastaWrite(object):
-    def __init__(self, filename=None):
+    def __init__(self, filename=None, fastq=False):
         """Simple Fasta writer to file or stdout. The only task this
         class achieves is formatting sequences into fixed line lengths.
 
@@ -291,6 +291,7 @@ class FastaWrite(object):
         :param mode: mode for opening file.
         """
         self.filename = filename
+        self.fastq = fastq
 
     def __enter__(self):
         if self.filename is not None and self.filename != '-':
@@ -303,14 +304,22 @@ class FastaWrite(object):
         if self.fh is not sys.stdout:
             self.fh.close()
 
-    def write(self, name, seq, meta=None, line_length=80):
-        if meta is None:
-            self.fh.write(">{}\n".format(name))
-        else:
-            self.fh.write(">{}\n".format(name))
-        
+    def write(self, name, seq, qual=None, meta=None, line_length=80):
+        if self.fastq:
+            self._write_fastq(name, seq, qual, meta)
+            return
+
+        #TODO: handle meta
+        self.fh.write(">{}\n".format(name))
         for chunk in (seq[i:i+line_length] for i in xrange(0, len(seq), line_length)):
             self.fh.write('{}\n'.format(chunk))
+        self.fh.flush()
+
+    def _write_fastq(self, name, seq, qual=None, meta=None):
+        if qual is None:
+            qual = '!'*len(seq)
+        #TODO: handle meta
+        self.fh.write("@{}\n{}\n+\n{}\n".format(name, seq, qual))
         self.fh.flush()
 
 
@@ -437,8 +446,6 @@ def tang_imap(
             yield r
         pool.close()
         pool.join()
-
-
 
 
 def fileno(file_or_fd):
