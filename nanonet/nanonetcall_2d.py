@@ -210,11 +210,12 @@ def main():
                 continue
             data, time = result['template']
             fname, basecall, _, n_ev = data
+            basecall, quality = basecall
             name, _ = short_names(fname)
             if args.fastq:
-                fasta_temp.write(name, *basecall)
+                fasta_temp.write(name, basecall, quality)
             else:
-                fasta_temp.write(name, basecall[0])
+                fasta_temp.write(name, basecall)
             n_reads += 1
             n_bases += len(basecall)
             n_events += n_ev
@@ -224,18 +225,20 @@ def main():
                 continue
             data, time = result['complement']
             _, basecall, _, _ = data
+            basecall, quality = basecall
             if args.fastq:
-                fasta_comp.write(name, *basecall)
+                fasta_comp.write(name, basecall, quality)
             else:
-                fasta_comp.write(name, basecall[0])
+                fasta_comp.write(name, basecall)
 
             if result['2d'] is None:
                 continue
-            basecall, time_2d = result['2d']         
+            basecall, time_2d = result['2d']
+            basecall, quality = basecall
             if args.fastq:
-                fasta_2d.write(name, *basecall)
+                fasta_2d.write(name, basecall, quality)
             else:
-                fasta_2d.write(name, basecall[0])
+                fasta_2d.write(name, basecall)
             n_bases_2d += len(basecall)
             timings[2] += time_2d
     t1 = now()

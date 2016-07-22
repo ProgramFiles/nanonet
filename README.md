@@ -39,6 +39,10 @@ C++ Compiler for Python 2.7 from:
 
     https://www.microsoft.com/en-gb/download/details.aspx?id=44266
 
+Most of these documentation assume you are using this compiler on Windows. The
+section **Compiling with MinGW-w64** explains how to use GCC based compilation
+on Windows.
+
 The only required dependencies are h5py and numpy. These can be downloaded and
 installed/compiled automatically though installing them from your system's
 package repository is generally preferable in the first instance. For Windows
@@ -216,6 +220,57 @@ by simply adding and option on the commandline:
 The program will automatically choose an OpenCL device to use, giving preference
 to GPU devices over CPU ones. It is not currently possible to use OpenCL acceleration for
 the 1D basecalling necessary for performing a 2D basecall.
+
+Compiling with MinGW-w64
+------------------------
+
+The Microsoft Visual C++ Compiler for Python 2.7 compiler is fairly old and can
+produce less than efficient code compared to more recent compilers. The
+following describes how one may instead compile nanonet using MinGW. This process
+is not recommended for those unfamiliar with compilation toolchains. We use
+specific, but not the latest, versions of MinGW and Boost in what follows. Be
+aware that these instructions may not work with later versions of these tools.
+
+First download the following build of MinGW-w64:
+
+    https://sourceforge.net/projects/mingwbuilds/files/host-windows/releases/4.8.1/64-bit/threads-posix/seh/x64-4.8.1-release-posix-seh-rev5.7z/download
+
+together with Boost 1.55.0:
+
+    https://sourceforge.net/projects/boost/files/boost/1.55.0/boost_1_55_0.7z/download
+    
+The files are packaged with 7zip, which you should install if you haven't
+previously. Extract both of the packages to:
+
+    C:\local\
+
+Open Windows Powershell and run the following to build the boost-python library:
+
+    $env:Path += ';C:\local\mingw64\bin'
+    cd c:\local\boost_1_55_0\
+    .\bootstrap.bat gcc
+    .\b2.exe toolset=gcc address-model=64 link=shared define=MS_WIN64 --with-python stage
+    
+The `distutils` module of Python 2.7 supports using MinGW as a compiler,
+although unfortunately it is likely to cause .dlls to be incorrectly
+linked when using MinGW-w64. For this reason and to streamline the build
+process, nanonet patches the class `distutils.cygwinccompiler.Mingw32CCompiler`
+with its own version and manipulates some `distutils` internals in order
+to force use of this class when a users elects to use MinGW-w64. All this
+means is that to compile and setup an in-place (development) install of
+nanonet run:
+
+    python setup.py develop --user with2d mingw
+
+If you have and existing MinGW-w64 setup you can use the environment
+variables `BOOST_ROOT`, `BOOST_LIB`, and `BOOST_PYTHON` to specify
+respectively the location of you boost install, relative location of
+the boost libraries, and the name of your boost-python library. For
+example the defaults are:
+
+    BOOST_ROOT  = "c:\local\boost_1_55_0\"
+    BOOST_LIB   = "stage\lib"
+    BOOST_PYTON = "boost_python-mgw48-mt-1_55"
 
 
 Training a network

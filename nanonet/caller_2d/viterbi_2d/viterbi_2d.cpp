@@ -14,7 +14,7 @@ using ublas::matrix;
 using ublas::matrix_row;
 using ublas::matrix_column;
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER)
   static const double M_PI = 3.14159265358979323846;
 #endif
 static const double SQRT_2PI = sqrt(2.0 * M_PI);

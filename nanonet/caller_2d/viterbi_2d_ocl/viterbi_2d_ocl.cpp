@@ -12,6 +12,9 @@
 #include <boost/numeric/ublas/matrix_proxy.hpp>
 #include "viterbi_2d_ocl.h"
 
+#if defined(_MSC_VER) || defined(__MINGW32__)
+static const double M_PI = 3.14159265358979323846;
+#endif
 static const double SQRT_2PI = sqrt(2.0 * M_PI);
 
 #define CHECKERR(msg) if (err != CL_SUCCESS) { throw std::runtime_error(msg " (" + std::string(proxy_cl_.ocl_error_to_string(err)) + ")"); }

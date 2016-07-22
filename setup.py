@@ -16,29 +16,21 @@ All rights reserved; (c)2016: Oxford Nanopore Technologies, Limited
 """
 
 # Get the version number from __init__.py
-verstrline = open(os.path.join('nanonet', '__init__.py'), 'r').read()
+pkg_name = 'nanonet'
+pkg_path = os.path.join(os.path.dirname(__file__), pkg_name)
+verstrline = open(os.path.join(pkg_path, '__init__.py'), 'r').read()
 vsre = r"^__version__ = ['\"]([^'\"]*)['\"]"
 mo = re.search(vsre, verstrline, re.M)
 if mo:
     version = mo.group(1)
 else:
-    raise RuntimeError('Unable to find version string in "nanonet/__init__.py".')
-
-
-OPTIMISATION = [ '-O3', '-DNDEBUG', '-fstrict-aliasing' ]
-c_compile_args = ['-pedantic', '-Wall', '-std=c99'] + OPTIMISATION
-cpp_compile_args = ['-std=c++0x'] + OPTIMISATION
-
-
-pkg_path = os.path.join(os.path.dirname(__file__), 'nanonet')
-
+    raise RuntimeError('Unable to find version string in "{}/__init__.py".'.format(pkg_name))
 
 system = platform.system()
 print "System is {}".format(system)
 print "By default the 2D basecaller (standard and OpenCL) are not built."
 print "To enable these use 'with2d' and 'opencl2d' command line options."
 print
-
 
 with_2d = True if 'with2d' in sys.argv else False
 if with_2d:
@@ -48,6 +40,20 @@ opencl_2d = True if 'opencl2d' in sys.argv else False
 if opencl_2d:
     with_2d = True
     sys.argv.remove('opencl2d')
+
+mingw = True if "mingw" in sys.argv else False
+if mingw:
+    sys.argv.remove('mingw')
+    # patch distutils to force our compiler class. With distutils build
+    #   command we can use the commandline option to set compiler but
+    #   develop command does accept this. C++ extensions also aren't
+    #   recognised as being unchanged meaning they get built twice with
+    #       build --compiler=mingw32 develop
+    #   all very annoying.
+    import distutils.cygwinccompiler
+    from nanoccompiler import Mingw64CCompiler
+    distutils.cygwinccompiler.Mingw32CCompiler = Mingw64CCompiler
+    distutils.ccompiler.get_default_compiler = lambda x: 'mingw32'
 
 main_include = os.path.join(os.path.dirname(__file__), 'nanonet', 'include')
 include_dirs = [main_include]
@@ -59,36 +65,63 @@ opencl_include = []
 opencl_lib_path = []
 opencl_libs = []
 
+c_compile_args = ['-pedantic', '-Wall', '-std=c99']
+cpp_compile_args = []
+optimisation = ['-DNDEBUG']
+
 if system == 'Darwin':
     print "Adding OSX compile/link options"
+    optimisation.extend(['-O3', '-fstrict-aliasing'])
+    cpp_compile_args.extend(['-std=c++0x','-Wno-unused-local-typedefs'])
     # may wish to edit - required for 2D
     boost_inc = ['/opt/local/include/']
     boost_libs.append('boost_python-mt')
 elif system == 'Windows':
-    print "Adding windows compile/link options"
-    include_dirs.append(os.path.join(main_include, 'extras'))
     event_detect_include.append(os.path.join(pkg_path, 'eventdetection'))
-    # may wish to edit - required for 2D
-    boost_location = os.path.join('c:', os.sep, 'local', 'boost_1_55_0')
-    boost_lib_name = 'lib64-msvc-9.0'
-    cpp_compile_args.append('/EHsc')
+    if not mingw:
+        print "Adding windows (MSVC) compile/link options"
+        optimisation = ['/O2', '/Gs-']
+        c_compile_args = ['/wd4820']
+        cpp_compile_args.extend(['/EHsc', '/wd4996'])
+        include_dirs.append(os.path.join(main_include, 'extras'))
+        boost_location = os.path.join('c:', os.sep, 'local', 'boost_1_55_0')
+        boost_lib_name = 'lib64-msvc-9.0'
+        if opencl_2d:
+            raise NotImplementedError('OpenCL 2D caller not currently supported on Windows with MSVC.')
+    else:
+        print "Adding windows (mingw64) compile/link options"
+        optimisation.extend(['-O3', '-fstrict-aliasing'])
+        c_compile_args.extend(['-DMS_WIN64', '-D_hypot=hypot'])
+        cpp_compile_args.extend(['-DMS_WIN64', '-D_hypot=hypot', '-Wno-unused-local-typedefs'])
+        boost_location = os.environ.get(
+            'BOOST_ROOT', os.path.join('c:', os.sep, 'local', 'boost_1_55_0'))
+        boost_lib_name = os.environ.get(
+            'BOOST_LIB', os.path.join('stage', 'lib'))
+        boost_libs.append(
+            os.environ.get('BOOST_PYTHON', 'boost_python-mgw48-mt-1_55'))
+        # may wish to edit - required for OpenCL 2D, this will compile
+        #   but likely die at runtime.
+        if opencl_2d:
+            raise NotImplementedError('OpenCL 2D caller not currently supported on Windows with mingw64.')
+        #nvidia_opencl = os.path.join('c:', os.sep,
+        #    'Program Files', 'NVIDIA GPU Computing Toolkit', 'CUDA', 'v7.5')
+        #opencl_include = [os.environ.get('OPENCL_INC', os.path.join(nvidia_opencl, 'include'))]
+        #opencl_lib_path = [os.environ.get('OPENCL_LIB', os.path.join(nvidia_opencl, 'lib', 'x64'))]
+        #opencl_libs.append('OpenCL')
     boost_lib_path = [os.path.join(boost_location, boost_lib_name)]
     boost_inc = [boost_location]
-    if opencl_2d:
-        raise NotImplementedError('OpenCL 2D caller not currently supported on Windows.')
-    # may wish to edit - required for OpenCL 2D
-    #nvidia_opencl = os.path.join('c:', os.sep,
-    #    'Program Files', 'NVIDIA GPU Computing Toolkit', 'CUDA', 'v7.5')
-    #opencl_include = [os.path.join(main_include, 'extras')] + [os.environ.get('OPENCL_INC'), os.path.join(nvidia_opencl, 'include')]
-    #opencl_lib_path = [os.environ.get('OPENCL_LIB'), os.path.join(nvidia_opencl, 'lib', 'x64')]
 else:
     print "Adding Linux(?) compile/link options"
+    optimisation.extend(['-O3', '-fstrict-aliasing'])
+    cpp_compile_args.extend(['-std=c++0x', '-Wno-unused-local-typedefs'])
     boost_libs.append('boost_python')
     # may wish to edit - required for OpenCL 2D
     opencl_include = [os.environ.get('OPENCL_INC')]
     opencl_lib_path = [os.environ.get('OPENCL_LIB', os.path.join(os.sep, 'opt','intel', 'opencl'))]
     opencl_libs.append('OpenCL')
-
+c_compile_args.extend(optimisation)
+cpp_compile_args.extend(optimisation)
+    
 extensions = []
 
 extensions.append(Extension(
@@ -162,7 +195,7 @@ if opencl_2d:
                 [os.path.join(caller_2d_path, 'common', x) for x in 
                  ('bp_tools.h', 'data_view.h', 'utils.h', 'view_numpy_arrays.h')],
         extra_compile_args=cpp_compile_args,
-        library_dirs=opencl_lib_path,
+        library_dirs=boost_lib_path + opencl_lib_path,
         libraries=boost_libs + opencl_libs 
     ))
 
@@ -203,3 +236,4 @@ setup(
         ]
     }
 )
+
