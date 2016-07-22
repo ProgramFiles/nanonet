@@ -27,6 +27,42 @@ only the canonical 1D basecalling library will be compiled; OpenCL acceleration
 of 1D basecalling and any 2D basecalling support will not be configured. See later
 sections of this documented for setting up these components.*
 
+**Requirements**
+
+Nanonet is a python-based commandline suite consisting of several programs for
+performing basecalling with recurrent neural networks. It has been developed
+using 64-bit Python 2.7 available from python.org.
+
+In addition to Python the only required dependencies are h5py and numpy. These can
+be downloaded and installed/compiled automatically, though installing them from your
+system's package repository is generally preferable in the first instance. For Windows
+Christophe Golke maintains a repository of compiled python wheels at:
+
+    http://www.lfd.uci.edu/~gohlke/pythonlibs/
+
+For OSX homebrew is easiest:
+
+    brew tap homebrew/science
+    brew install hdf5
+
+**Easy Windows Installation**
+
+Python wheels for nanonet are available from the github page under the releases
+tab:
+
+    https://github.com/nanoporetech/nanonet-dev/releases
+
+to install these run the following from a command prompt:
+
+    pip install nanonet-2.0.0-cp27-cp27m-win_amd64.whl
+
+The wheel currently enables CPU implementataions of both 1D and 2D calling,
+and additionally the OpenCL implementation of 1D calling. To enable the latter
+please refer to the OpenCL section below. Wheels for other platforms may be made
+available in the future.
+
+**Setup**
+
 The basecalling component of nanonet should install quite trivially using the
 standard python mechanism on most platforms:
 
@@ -43,21 +79,6 @@ Most of these documentation assume you are using this compiler on Windows. The
 section **Compiling with MinGW-w64** explains how to use GCC based compilation
 on Windows.
 
-The only required dependencies are h5py and numpy. These can be downloaded and
-installed/compiled automatically though installing them from your system's
-package repository is generally preferable in the first instance. For Windows
-Christophe Golke maintains a repository of compiled python wheels at:
-
-    http://www.lfd.uci.edu/~gohlke/pythonlibs/
-
-For OSX homebrew is easiest:
-
-    brew tap homebrew/science
-    brew install hdf5
-
-See the full installation instructions for further details, where instructions
-to perform a binary installation under Ubuntu can also be found.
-
 **Optional Watcher Component**
 
 Nanonet contains an optional component to watch a filesystem for read files as
@@ -66,8 +87,11 @@ install it run
 
     pip install -e  .[watcher]
 
-from the source directory. This will allow use of the `--watch` option of the
-basecaller.
+from the source directory, or simply
+
+    pip install watchdog
+
+for any location. This will allow use of the `--watch` option of the basecaller.
 
 
 Peforming basecalling

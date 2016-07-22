@@ -211,6 +211,31 @@ extra_requires = {
     'opencl': ['pyopencl']
 }
 
+
+# Making a whl for windows
+bdist_args = dict()
+if system == 'Windows' and "bdist_wheel" in sys.argv:
+    from setuptools import Distribution
+    from distutils.spawn import find_executable
+    from glob import glob
+    class BinaryDistribution(Distribution):
+        def is_pure(self):
+            return False
+        def has_ext_modules(self):
+            return True
+ 
+    blibs = [os.path.join(boost_location, boost_lib_name, 'lib{}.dll'.format(x)) for x in boost_libs]
+    mingwdir = os.path.dirname(find_executable('gcc'))
+    mingwlibs = glob(os.path.join(mingwdir,'*.dll'))
+    mingwlibs = [os.path.join(mingwdir, x) for x in mingwlibs]
+    dlls = [os.path.relpath(x) for x in blibs + mingwlibs]
+    print dlls
+    bdist_args = {
+        'scripts':dlls,
+        'distclass':BinaryDistribution
+        }
+
+
 setup(
     name='nanonet',
     version=version,
@@ -234,6 +259,7 @@ setup(
             'nanonet2d = nanonet.nanonetcall_2d:main',
             'nanonettrain = nanonet.nanonettrain:main'
         ]
-    }
+    },
+    **bdist_args
 )
 
