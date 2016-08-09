@@ -421,7 +421,8 @@ def main():
     if args.watch is not None:
         # An optional component
         from nanonet.watcher import Fast5Watcher
-        fast5_files = Fast5Watcher(args.input, timeout=args.watch)
+        initial_jobs = iterate_fast5(args.input, paths=True) 
+        fast5_files = Fast5Watcher(args.input, timeout=args.watch, initial_jobs=initial_jobs)
     else:
         sort_by_size = 'desc' if args.platforms is not None else None
         fast5_files = iterate_fast5(args.input, paths=True, strand_list=args.strand_list, limit=args.limit, sort_by_size=sort_by_size)

@@ -10,16 +10,18 @@ except ImportError:
 
 class Fast5Watcher(object):
 
-    def __init__(self, path, timeout=10, regex='.*\.fast5$'):
+    def __init__(self, path, timeout=10, regex='.*\.fast5$', initial_jobs=None):
         """Watch a path and yield modified files
 
         :param path: path to watch for files.
         :param timeout: timeout period for newly modified files.
         :param regex: regex filter for files to consifer.
+        :param initial_jobs: pre-existing files to process.
         """
         self.path = path
         self.timeout = timeout
         self.regex = regex
+        self.initial_jobs = initial_jobs
         self.q = Queue()
         self.watcher = Process(target=self._watcher)
         self.yielded = set()
@@ -38,6 +40,12 @@ class Fast5Watcher(object):
         observer.join()
 
     def __iter__(self):
+        if self.initial_jobs is not None:
+            for item in self.initial_jobs:
+                if item not in self.yielded:
+                    yield item
+                    self.yielded.add(item)
+
         self.watcher.start()
         while True:
             try:
