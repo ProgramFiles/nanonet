@@ -40,13 +40,14 @@ class Fast5Watcher(object):
         observer.join()
 
     def __iter__(self):
+        self.watcher.start()
+
         if self.initial_jobs is not None:
             for item in self.initial_jobs:
                 if item not in self.yielded:
                     yield item
                     self.yielded.add(item)
 
-        self.watcher.start()
         while True:
             try:
                 item = self.q.get(True, self.timeout)
