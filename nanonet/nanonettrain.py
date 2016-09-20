@@ -147,7 +147,8 @@ def main():
     with open(modelfile, 'w') as model:
         model.write(mod)
     final_network = "{}_final.jsn".format(outputfile)
-    final_network_numpy = "{}_final.npy".format(outputfile)
+    best_network_prefix = "{}_auto".format(outputfile)
+    # currennt appends some bits here
 
     # currennt cfg files
     with open(config_name, 'w') as currennt_cfg:
@@ -159,7 +160,7 @@ def main():
         currennt_cfg.write(conf_line("train_file", trainfile))
         currennt_cfg.write(conf_line("val_file", valfile))
         currennt_cfg.write(conf_line("save_network", final_network))
-        currennt_cfg.write(conf_line("autosave_prefix", "{}_auto".format(outputfile)))
+        currennt_cfg.write(conf_line("autosave_prefix", best_network_prefix))
         # Tunable parameters
         currennt_cfg.write(conf_line("max_epochs", args.max_epochs))
         currennt_cfg.write(conf_line("max_epochs_no_best", args.max_epochs_no_best))
@@ -184,13 +185,16 @@ def main():
 
     # Currennt won't pass through our meta in the model, amend the output
     # and write out a numpy version of the network
-    mod = json.load(open(final_network, 'r'))
-    print "Adding model meta to currennt final network"
+    best_network = "{}.best.jsn".format(best_network_prefix)
+    best_network_numpy = "{}_best.npy".format(outputfile)
+
+    print "Adding model meta to currennt best network: {}".format(best_network)
+    mod = json.load(open(best_network, 'r'))
     mod['meta'] = mod_meta
-    json.dump(mod, open(final_network, 'w'))
-    print "Transforming network to numpy pickle"
+    json.dump(mod, open(best_network, 'w'))
+    print "Transforming network to numpy pickle: {}".format(best_network_numpy)
     mod = network_to_numpy(mod)
-    np.save(final_network_numpy, mod)
+    np.save(best_network_numpy, mod)
         
 
 
