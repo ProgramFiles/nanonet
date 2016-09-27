@@ -6,9 +6,10 @@
 Nanonet
 =======
 
-Nanonet provides recurrent neural network basecalling via currennt. Event data
-is extracted from .fast5 files to create feature vectors to input into a
-pretrained network. Output is as a single .fasta file.
+Nanonet provides recurrent neural network basecalling for Oxford Nanopore MinION
+data. It represents the first generation of such a basecaller from Oxford Nanopore
+Technologies, and is provided as a technology demonstrator. Nanonet is provided
+unsupported by Oxford Nanopore Technologies, see LICENSE.md for more information.
 
 For training networks, Nanonet leverages currennt to run recurrent neural
 networks. Currennt is generally run with GPUs to aid performance but can be run
