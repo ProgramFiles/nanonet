@@ -33,7 +33,14 @@ __fast5_analysis_name__ = 'Basecall_RNN_2D'
 
 def get_parser():
     parser = argparse.ArgumentParser(
-        description="""A simple RNN basecaller for Oxford Nanopore data.""",
+        description="""A 2D RNN basecaller for Oxford Nanopore data.
+
+This software is subject to the terms of the Mozilla Public
+License, v. 2.0. If a copy of the MPL was not distributed with this
+file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+(c) 2016 Oxford Nanopore Technologies Ltd.
+""",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
 
